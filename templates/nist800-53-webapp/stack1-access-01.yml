@@ -1,0 +1,645 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  cCreateCloudTrail:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pCreateCloudTrail
+      - 'no'
+  cCreateCloudTrailBucketLocal:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pS3CloudTrailLocal
+      - none
+  cExistingCloudTrailBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pS3CloudTrailBucketExisting
+      - none
+Description: Provides the base security, logging, IAM, and access configuration for
+  the AWS account
+Metadata:
+  Identifier:
+    Value: stack1-access-01
+  Input:
+    Description: CloudTrail bucket name
+  Output:
+    Description: Outputs ID of all deployed resources
+  Stack:
+    Value: '1'
+  VersionDate:
+    Value: 09292015
+Outputs:
+  rCloudTrailProfile:
+    Value:
+      Fn::If:
+      - cCreateCloudTrailBucketLocal
+      - Ref: rCloudTrailProfile
+      - N/A
+  rCloudTrailRole:
+    Value:
+      Fn::If:
+      - cCreateCloudTrailBucketLocal
+      - Ref: rCloudTrailRole
+      - N/A
+  rIAMAdminGroup:
+    Value:
+      Ref: rIAMAdminGroup
+  rInstanceOpsGroup:
+    Value:
+      Ref: rInstanceOpsGroup
+  rReadOnlyAdminGroup:
+    Value:
+      Ref: rReadOnlyAdminGroup
+  rReadOnlyBillingGroup:
+    Value:
+      Ref: rReadOnlyBillingGroup
+  rSysAdmin:
+    Value:
+      Ref: rSysAdmin
+Parameters:
+  pCreateCloudTrail:
+    Default: 'no'
+    Description: Create new CloudTrail Trail (yes or no), if yes must provide Existing
+      or Local parameter? 'no' will not setup any CloudTrail logging
+    Type: String
+  pNotifyEmail:
+    Default: distlist@example.org
+    Description: Notification email for security events
+    Type: String
+  pS3CloudTrailBucketExisting:
+    Default: none
+    Description: Name of EXISTING S3 log bucket for CloudTrail, bucket must already
+      exist
+    Type: String
+  pS3CloudTrailLocal:
+    Default: none
+    Description: Name of new local bucket for S3 logging to create new (leave 'none'
+      to not create local bucket), if specifying new local bucket do not use pS3CloudTrailBucketExisting
+    Type: String
+Resources:
+  rCloudTrailBucket:
+    Condition: cCreateCloudTrailBucketLocal
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: Private
+      BucketName:
+        Fn::Join:
+        - ''
+        - - Ref: pS3CloudTrailLocal
+          - '-'
+          - Ref: AWS::Region
+          - '-'
+          - Ref: AWS::AccountId
+      VersioningConfiguration:
+        Status: Enabled
+    Type: AWS::S3::Bucket
+  rCloudTrailLogGroup:
+    Condition: cCreateCloudTrailBucketLocal
+    Properties:
+      RetentionInDays: '90'
+    Type: AWS::Logs::LogGroup
+  rCloudTrailLogging:
+    Condition: cExistingCloudTrailBucket
+    Properties:
+      EnableLogFileValidation: true
+      IsLogging: true
+      S3BucketName:
+        Fn::If:
+        - cCreateCloudTrailBucketLocal
+        - Fn::Join:
+          - ''
+          - - Ref: pS3CloudTrailLocal
+            - '-'
+            - Ref: AWS::Region
+            - '-'
+            - Ref: AWS::AccountId
+        - Ref: pS3CloudTrailBucketExisting
+    Type: AWS::CloudTrail::Trail
+  rCloudTrailLoggingLocal:
+    Condition: cCreateCloudTrailBucketLocal
+    DependsOn: rCloudTrailBucket
+    Properties:
+      CloudWatchLogsLogGroupArn:
+        Fn::GetAtt:
+        - rCloudTrailLogGroup
+        - Arn
+      CloudWatchLogsRoleArn:
+        Fn::GetAtt:
+        - rCloudWatchLogsRole
+        - Arn
+      EnableLogFileValidation: true
+      IsLogging: true
+      S3BucketName:
+        Fn::If:
+        - cCreateCloudTrailBucketLocal
+        - Fn::Join:
+          - ''
+          - - Ref: pS3CloudTrailLocal
+            - '-'
+            - Ref: AWS::Region
+            - '-'
+            - Ref: AWS::AccountId
+        - Ref: pS3CloudTrailBucketExisting
+    Type: AWS::CloudTrail::Trail
+  rCloudTrailProfile:
+    Condition: cCreateCloudTrailBucketLocal
+    DependsOn: rCloudTrailRole
+    Properties:
+      Path: /
+      Roles:
+      - Ref: rCloudTrailRole
+    Type: AWS::IAM::InstanceProfile
+  rCloudTrailRole:
+    Condition: cCreateCloudTrailBucketLocal
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - s3:ListBucket
+            Effect: Allow
+            Resource:
+            - Fn::Join:
+              - ''
+              - - 'arn:aws:s3:::'
+                - ctrail-
+                - Ref: AWS::Region
+                - '-'
+                - Ref: AWS::AccountId
+          - Action:
+            - s3:PutObject
+            - s3:GetObject
+            Effect: Allow
+            Resource:
+            - Fn::Join:
+              - ''
+              - - 'arn:aws:s3:::'
+                - ctrail-
+                - Ref: AWS::Region
+                - '-'
+                - Ref: AWS::AccountId
+                - /*
+          Version: '2012-10-17'
+        PolicyName: customsecurityaudit
+    Type: AWS::IAM::Role
+  rCloudTrailS3Policy:
+    Condition: cCreateCloudTrailBucketLocal
+    DependsOn: rCloudTrailBucket
+    Properties:
+      Bucket:
+        Ref: rCloudTrailBucket
+      PolicyDocument:
+        Statement:
+        - Action: s3:GetBucketAcl
+          Effect: Allow
+          Principal:
+            AWS:
+            - arn:aws:iam::903692715234:root
+            - arn:aws:iam::859597730677:root
+            - arn:aws:iam::814480443879:root
+            - arn:aws:iam::216624486486:root
+            - arn:aws:iam::086441151436:root
+            - arn:aws:iam::388731089494:root
+            - arn:aws:iam::284668455005:root
+            - arn:aws:iam::113285607260:root
+            - arn:aws:iam::035351147821:root
+          Resource:
+          - Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: pS3CloudTrailLocal
+              - '-'
+              - Ref: AWS::Region
+              - '-'
+              - Ref: AWS::AccountId
+          Sid: AWSCloudTrailAclCheck20131101
+        - Action: s3:PutObject
+          Condition:
+            StringEquals:
+              s3:x-amz-acl: bucket-owner-full-control
+          Effect: Allow
+          Principal:
+            AWS:
+            - arn:aws:iam::903692715234:root
+            - arn:aws:iam::859597730677:root
+            - arn:aws:iam::814480443879:root
+            - arn:aws:iam::216624486486:root
+            - arn:aws:iam::086441151436:root
+            - arn:aws:iam::388731089494:root
+            - arn:aws:iam::284668455005:root
+            - arn:aws:iam::113285607260:root
+            - arn:aws:iam::035351147821:root
+          Resource:
+          - Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: pS3CloudTrailLocal
+              - '-'
+              - Ref: AWS::Region
+              - '-'
+              - Ref: AWS::AccountId
+              - /AWSLogs/
+              - Ref: AWS::AccountId
+              - /*
+          Sid: AWSCloudTrailWrite20131101
+        - Action: s3:*
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+          Effect: Deny
+          Principal: '*'
+          Resource:
+          - Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: pS3CloudTrailLocal
+              - '-'
+              - Ref: AWS::Region
+              - '-'
+              - Ref: AWS::AccountId
+              - /AWSLogs/
+              - Ref: AWS::AccountId
+              - /*
+          Sid: Enforce HTTPS Connections
+    Type: AWS::S3::BucketPolicy
+  rCloudWatchLogsRole:
+    Condition: cCreateCloudTrailBucketLocal
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudtrail.amazonaws.com
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - logs:CreateLogStream
+            Effect: Allow
+            Resource:
+            - Fn::Join:
+              - ''
+              - - 'arn:aws:logs:'
+                - Ref: AWS::Region
+                - ':'
+                - Ref: AWS::AccountId
+                - ':log-group:'
+                - Ref: rCloudTrailLogGroup
+                - :log-stream:*
+            Sid: AWSCloudTrailCreateLogStream20141101
+          - Action:
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource:
+            - Fn::Join:
+              - ''
+              - - 'arn:aws:logs:'
+                - Ref: AWS::Region
+                - ':'
+                - Ref: AWS::AccountId
+                - ':log-group:'
+                - Ref: rCloudTrailLogGroup
+                - :log-stream:*
+            Sid: AWSCloudTrailPutLogEvents20141101
+          Version: '2012-10-17'
+        PolicyName: cloudwatchlogsrole
+    Type: AWS::IAM::Role
+  rIAMAdminGroup:
+    Properties:
+      Path: /
+    Type: AWS::IAM::Group
+  rIAMAdminPolicy:
+    Properties:
+      Groups:
+      - Ref: rIAMAdminGroup
+      PolicyDocument:
+        Statement:
+        - Action: iam:*
+          Effect: Allow
+          Resource: '*'
+        - Action: aws-portal:*Billing
+          Effect: Deny
+          Resource: '*'
+        Version: '2012-10-17'
+      Roles:
+      - Ref: rIAMAdminRole
+    Type: AWS::IAM::ManagedPolicy
+  rIAMAdminProfile:
+    DependsOn: rIAMAdminRole
+    Properties:
+      Path: /
+      Roles:
+      - Ref: rIAMAdminRole
+    Type: AWS::IAM::InstanceProfile
+  rIAMAdminRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+    Type: AWS::IAM::Role
+  rIAMPolicyChangesAlarm:
+    Properties:
+      AlarmActions:
+      - Ref: rSecurityAlarmTopic
+      AlarmDescription: IAM configuration changes detected!
+      AlarmName: CloudTrailIAMPolicyChanges
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: '1'
+      MetricName: IAMPolicyEventCount
+      Namespace: CloudTrailMetrics
+      Period: '300'
+      Statistic: Sum
+      Threshold: '1'
+    Type: AWS::CloudWatch::Alarm
+  rIAMPolicyChangesMetricFilter:
+    Condition: cCreateCloudTrailBucketLocal
+    Properties:
+      FilterPattern: '{($.eventName=*User)||($.eventName=*Group)||($.eventName=*Role)||($.eventName=*Policy)}'
+      LogGroupName:
+        Ref: rCloudTrailLogGroup
+      MetricTransformations:
+      - MetricName: IAMPolicyEventCount
+        MetricNamespace: CloudTrailMetrics
+        MetricValue: '1'
+    Type: AWS::Logs::MetricFilter
+  rIAMRootActivity:
+    Condition: cCreateCloudTrailBucketLocal
+    Properties:
+      FilterPattern: '{($.userIdentity=root)}'
+      LogGroupName:
+        Ref: rCloudTrailLogGroup
+      MetricTransformations:
+      - MetricName: RootUserPolicyEventCount
+        MetricNamespace: CloudTrailMetrics
+        MetricValue: '1'
+    Type: AWS::Logs::MetricFilter
+  rInstanceOpsGroup:
+    Properties:
+      Path: /
+    Type: AWS::IAM::Group
+  rInstanceOpsPolicy:
+    Properties:
+      Groups:
+      - Ref: rInstanceOpsGroup
+      PolicyDocument:
+        Statement:
+        - Action: ec2:*
+          Effect: Allow
+          Resource: '*'
+        - Action: elasticloadbalancing:*
+          Effect: Allow
+          Resource: '*'
+        - Action: cloudwatch:*
+          Effect: Allow
+          Resource: '*'
+        - Action: autoscaling:*
+          Effect: Allow
+          Resource: '*'
+        - Action:
+          - ec2:CreateVpc*
+          - ec2:DeleteVpc*
+          - ec2:ModifyVpc*
+          - ec2:CreateSubnet*
+          - ec2:DeleteSubnet*
+          - ec2:ModifySubnet*
+          - ec2:Create*Route*
+          - ec2:DeleteRoute*
+          - ec2:AssociateRoute*
+          - ec2:ReplaceRoute*
+          - ec2:CreateVpn*
+          - ec2:DeleteVpn*
+          - ec2:AttachVpn*
+          - ec2:DetachVpn*
+          - ec2:CreateNetworkAcl*
+          - ec2:DeleteNetworkAcl*
+          - ec2:ReplaceNetworkAcl*
+          - ec2:*Gateway*
+          - ec2:*PeeringConnection*
+          Effect: Deny
+          Resource: '*'
+        - Action: aws-portal:*Billing
+          Effect: Deny
+          Resource: '*'
+        Version: '2012-10-17'
+      Roles:
+      - Ref: rInstanceOpsRole
+    Type: AWS::IAM::ManagedPolicy
+  rInstanceOpsProfile:
+    DependsOn: rIAMAdminRole
+    Properties:
+      Path: /
+      Roles:
+      - Ref: rIAMAdminRole
+    Type: AWS::IAM::InstanceProfile
+  rInstanceOpsRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+    Type: AWS::IAM::Role
+  rReadOnlyAdminGroup:
+    Properties:
+      Path: /
+    Type: AWS::IAM::Group
+  rReadOnlyAdminPolicy:
+    DependsOn: rReadOnlyAdminProfile
+    Properties:
+      Groups:
+      - Ref: rReadOnlyAdminGroup
+      PolicyDocument:
+        Statement:
+        - Action:
+          - appstream:Get*
+          - autoscaling:Describe*
+          - cloudformation:DescribeStacks
+          - cloudformation:DescribeStackEvents
+          - cloudformation:DescribeStackResource
+          - cloudformation:DescribeStackResources
+          - cloudformation:GetTemplate
+          - cloudformation:List*
+          - cloudfront:Get*
+          - cloudfront:List*
+          - cloudtrail:DescribeTrails
+          - cloudtrail:GetTrailStatus
+          - cloudwatch:Describe*
+          - cloudwatch:Get*
+          - cloudwatch:List*
+          - directconnect:Describe*
+          - dynamodb:GetItem
+          - dynamodb:BatchGetItem
+          - dynamodb:Query
+          - dynamodb:Scan
+          - dynamodb:DescribeTable
+          - dynamodb:ListTables
+          - ec2:Describe*
+          - elasticache:Describe*
+          - elasticbeanstalk:Check*
+          - elasticbeanstalk:Describe*
+          - elasticbeanstalk:List*
+          - elasticbeanstalk:RequestEnvironmentInfo
+          - elasticbeanstalk:RetrieveEnvironmentInfo
+          - elasticloadbalancing:Describe*
+          - elastictranscoder:Read*
+          - elastictranscoder:List*
+          - iam:List*
+          - iam:Get*
+          - kinesis:Describe*
+          - kinesis:Get*
+          - kinesis:List*
+          - opsworks:Describe*
+          - opsworks:Get*
+          - route53:Get*
+          - route53:List*
+          - redshift:Describe*
+          - redshift:ViewQueriesInConsole
+          - rds:Describe*
+          - rds:ListTagsForResource
+          - s3:Get*
+          - s3:List*
+          - sdb:GetAttributes
+          - sdb:List*
+          - sdb:Select*
+          - ses:Get*
+          - ses:List*
+          - sns:Get*
+          - sns:List*
+          - sqs:GetQueueAttributes
+          - sqs:ListQueues
+          - sqs:ReceiveMessage
+          - storagegateway:List*
+          - storagegateway:Describe*
+          - trustedadvisor:Describe*
+          Effect: Allow
+          Resource: '*'
+        - Action: aws-portal:*Billing
+          Effect: Deny
+          Resource: '*'
+        Version: '2012-10-17'
+      Roles:
+      - Ref: rReadOnlyAdminRole
+    Type: AWS::IAM::ManagedPolicy
+  rReadOnlyAdminProfile:
+    DependsOn: rReadOnlyAdminRole
+    Properties:
+      Path: /
+      Roles:
+      - Ref: rReadOnlyAdminRole
+    Type: AWS::IAM::InstanceProfile
+  rReadOnlyAdminRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+    Type: AWS::IAM::Role
+  rReadOnlyBillingGroup:
+    Properties:
+      Path: /
+    Type: AWS::IAM::Group
+  rReadOnlyBillingPolicy:
+    Properties:
+      Groups:
+      - Ref: rReadOnlyBillingGroup
+      PolicyDocument:
+        Statement:
+        - Action: aws-portal:View*
+          Effect: Allow
+          Resource: '*'
+        - Action: aws-portal:*Account
+          Effect: Deny
+          Resource: '*'
+        Version: '2012-10-17'
+    Type: AWS::IAM::ManagedPolicy
+  rRootActivityAlarm:
+    Properties:
+      AlarmActions:
+      - Ref: rSecurityAlarmTopic
+      AlarmDescription: Root user activity detected!
+      AlarmName: CloudTrailIAMRootActivity
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: '1'
+      MetricName: RootUserPolicyEventCount
+      Namespace: CloudTrailMetrics
+      Period: '300'
+      Statistic: Sum
+      Threshold: '1'
+    Type: AWS::CloudWatch::Alarm
+  rSecurityAlarmTopic:
+    Properties:
+      Subscription:
+      - Endpoint:
+          Ref: pNotifyEmail
+        Protocol: email
+    Type: AWS::SNS::Topic
+  rSysAdmin:
+    Properties:
+      Path: /
+    Type: AWS::IAM::Group
+  rSysAdminPolicy:
+    Properties:
+      Groups:
+      - Ref: rSysAdmin
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          NotAction: iam:*
+          Resource: '*'
+        - Action: aws-portal:*Billing
+          Effect: Deny
+          Resource: '*'
+        - Action:
+          - cloudtrail:DeleteTrail
+          - cloudtrail:StopLogging
+          - cloudtrail:UpdateTrail
+          Effect: Deny
+          Resource: '*'
+        Version: '2012-10-17'
+      Roles:
+      - Ref: rSysAdminRole
+    Type: AWS::IAM::ManagedPolicy
+  rSysAdminProfile:
+    DependsOn: rSysAdminRole
+    Properties:
+      Path: /
+      Roles:
+      - Ref: rSysAdminRole
+    Type: AWS::IAM::InstanceProfile
+  rSysAdminRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+    Type: AWS::IAM::Role
+

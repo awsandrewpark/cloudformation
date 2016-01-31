@@ -1,0 +1,685 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  CreateAppLogsBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pAppLogsBucketName
+      - none
+  CreateBackupBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pBackupBucketName
+      - none
+  CreateStack1:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: stack1URL
+      - ''
+  CreateStack2:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: stack2URL
+      - ''
+  CreateStack3:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: stack3URL
+      - ''
+  CreateStack4:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: stack4URL
+      - ''
+  CreateVPCDevelopment:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: createVPCDevelopment
+      - 'yes'
+    - Fn::Equals:
+      - Ref: createVPCDevelopment
+      - 'YES'
+  CreateVPCManagement:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: createVPCManagement
+      - 'yes'
+    - Fn::Equals:
+      - Ref: createVPCManagement
+      - 'YES'
+    - Fn::Equals:
+      - Ref: createVPCManagement
+      - 'true'
+    - Fn::Equals:
+      - Ref: createVPCManagement
+      - 'True'
+  CreateWebAppBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pWebContentBucketName
+      - none
+Description: '(0016) Proserve NIST Main template. This template will deploy a full
+  environment with a 3 tier linux-based web application, including IAM, VPC, and application.
+  Must have full admin rights to deploy. '
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Network Configuration
+      Parameters:
+      - createVPCDevelopment
+      - createVPCManagement
+      - pProductionVPCName
+      - pDevelopmentVPCName
+      - pManagementVPCName
+      - pProductionCIDR
+      - pDevelopmentCIDR
+      - pManagementCIDR
+      - pAppPrivateSubnetACIDR
+      - pAppPrivateSubnetBCIDR
+      - pDMZSubnetACIDR
+      - pDMZSubnetBCIDR
+      - pDBPrivateSubnetACIDR
+      - pDBPrivateSubnetBCIDR
+      - pDMZSubnetBCIDR
+      - pDevSubnetACIDR
+      - pDevSubnetBCIDR
+      - pManagementSubnetACIDR
+      - pManagementSubnetBCIDR
+      - pNatInstanceType
+    - Label:
+        default: EC2 Configuration
+      Parameters:
+      - pAppInstanceType
+      - pWebInstanceType
+      - pAppAmi
+      - pWebServerAMI
+      - pKeyName
+    - Label:
+        default: Logging
+      Parameters:
+      - pCreateCloudTrail
+      - pS3CloudTrailLocal
+      - pS3CloudTrailBucketExisting
+    - Label:
+        default: Database
+      Parameters:
+      - pDBClass
+      - pDBAllocatedStorage
+      - pDBName
+      - pDBUser
+      - pDBPassword
+    - Label:
+        default: Optional Buckets
+      Parameters:
+      - pBackupBucketName
+      - pAppLogsBucketName
+      - pWebContentBucketName
+    - Label:
+        default: Nested StackURLs
+      Parameters:
+      - stack1URL
+      - stack2URL
+      - stack3URL
+      - stack4URL
+    ParameterLabels:
+      createVPCDevelopment:
+        default: Do you want to create a Development VPC in this account?
+      createVPCManagement:
+        default: Do you want to create a Management VPC in this account?
+      pCreateCloudTrail:
+        default: Do you want to enable CloudTrail Logging?
+      pS3CloudTrailBucketExisting:
+        default: Specify an existing bucket name if one already exists
+      pS3CloudTrailLocal:
+        default: Specify a new bucket name to create for CloudTrail
+  Identifier:
+    Value: main-webapp-linux-01
+  Input:
+    Description: Input of all required parameters in nested stacks
+  Output:
+    Description: N/A
+  Stack:
+    Value: '0'
+  VersionDate:
+    Value: 09292015
+Outputs:
+  TemplateType:
+    Value: Standard Multi-Tier Web Application
+  TemplateVersion:
+    Value: '1.0'
+Parameters:
+  createVPCDevelopment:
+    Default: 'no'
+    Description: Create Development VPC? (yes/no)
+    Type: String
+  createVPCManagement:
+    Default: 'yes'
+    Description: Create Management VPC? (yes/no)
+    Type: String
+  pAppAmi:
+    Default: ami-60b6c60a
+    Description: Which App AMI do you want to use?
+    Type: String
+  pAppInstanceType:
+    AllowedValues:
+    - t1.micro
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - c1.medium
+    - c1.xlarge
+    - c3.large
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - g2.2xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - hi1.4xlarge
+    - hs1.8xlarge
+    - cr1.8xlarge
+    - cc2.8xlarge
+    - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type, existing in the mapping.
+    Default: m3.large
+    Description: Application Server EC2 instance type
+    Type: String
+  pAppLogsBucketName:
+    Default: none
+    Description: Name of S3 Bucket to use for application logs (optional)
+    Type: String
+  pAppPrivateSubnetACIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.10.0/24
+    Description: CIDR block for Public AZ-1a subnet
+    Type: String
+  pAppPrivateSubnetBCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.11.0/24
+    Description: CIDR block for Public AZ-1b subnet
+    Type: String
+  pBackupBucketName:
+    Default: none
+    Description: Name of S3 Bucket to use for backup/DR data (optional)
+    Type: String
+  pCreateCloudTrail:
+    Default: 'no'
+    Description: Create new CloudTrail Trail (yes or no), if yes must provide pS3CloudTrailBucketExisting
+      or pS3CloudTrailLocal parameter? 'no' will not setup any CloudTrail logging
+    Type: String
+  pDBAllocatedStorage:
+    Default: '10'
+    Description: Allocated Storage (in GB) for RDS instance
+    Type: String
+  pDBClass:
+    Default: db.m3.large
+    Description: Instance class of RDS instance
+    Type: String
+  pDBName:
+    Default: TestDB
+    Description: Name of RDS Database
+    Type: String
+  pDBPassword:
+    Description: '*Password of RDS DB Instance (minimum 8 characters)'
+    NoEcho: 'True'
+    Type: String
+  pDBPrivateSubnetACIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.20.0/24
+    Description: CIDR block for Private AZ-1a subnet
+    Type: String
+  pDBPrivateSubnetBCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.21.0/24
+    Description: CIDR block for Private AZ-1b subnet
+    Type: String
+  pDBUser:
+    Default: Administrator
+    Description: Username of RDS DB Instance
+    Type: String
+  pDMZSubnetACIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.1.0/24
+    Description: CIDR block for DMZ AZ-1b subnet
+    Type: String
+  pDMZSubnetBCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.2.0/24
+    Description: CIDR block for DMZ AZ-1b subnet
+    Type: String
+  pDevSubnetACIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.20.1.0/24
+    Description: CIDR block for Development AZ-1a subnet
+    Type: String
+  pDevSubnetBCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.20.2.0/24
+    Description: CIDR block for Development AZ-1b subnet
+    Type: String
+  pDevelopmentCIDR:
+    AllowedPattern: ((\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})|False)
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.20.0.0/16
+    Description: CIDR block for Development VPC
+    Type: String
+  pDevelopmentVPCName:
+    Default: Development
+    Description: Development VPC Name
+    Type: String
+  pKeyName:
+    Default: ''
+    Description: Key Name for Instance
+    Type: AWS::EC2::KeyPair::KeyName
+  pManagementCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.10.0.0/16
+    Description: CIDR block for Management VPC
+    Type: String
+  pManagementSubnetACIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.10.1.0/24
+    Description: CIDR block for Management AZ-1a subnet
+    Type: String
+  pManagementSubnetBCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.10.2.0/24
+    Description: CIDR block for Management AZ-1b subnet
+    Type: String
+  pNatInstanceType:
+    AllowedValues:
+    - t1.micro
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - c1.medium
+    - c1.xlarge
+    - c3.large
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - g2.2xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - hi1.4xlarge
+    - hs1.8xlarge
+    - cr1.8xlarge
+    - cc2.8xlarge
+    - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type, existing in the mapping.
+    Default: t1.micro
+    Description: Nat EC2 instance type
+    Type: String
+  pNotifyEmail:
+    Default: distlist@example.org
+    Description: Notification email for security events
+    Type: String
+  pProductionCIDR:
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 10.100.0.0/16
+    Description: CIDR block for Production VPC
+    Type: String
+  pProductionVPCName:
+    Default: Production
+    Description: Production VPC Name
+    Type: String
+  pRegionAZ1Name:
+    Description: Availability Zone 1 Name in Region
+    Type: AWS::EC2::AvailabilityZone::Name
+  pRegionAZ2Name:
+    Description: Availability Zone 2 Name in Region
+    Type: AWS::EC2::AvailabilityZone::Name
+  pRegionDomain:
+    Default: us-east-1.compute.internal
+    Description: Region name where resources will deploy
+    Type: String
+  pS3CloudTrailBucketExisting:
+    Default: none
+    Description: Name of EXISTING S3 log bucket for CloudTrail if not creating new
+    Type: String
+  pS3CloudTrailLocal:
+    Default: none
+    Description: Name of new local bucket for S3 logging (required)
+    Type: String
+  pWebContentBucketName:
+    Default: none
+    Description: Name of S3 Bucket to use for web content (optional)
+    Type: String
+  pWebInstanceType:
+    AllowedValues:
+    - t1.micro
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - c1.medium
+    - c1.xlarge
+    - c3.large
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - g2.2xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - hi1.4xlarge
+    - hs1.8xlarge
+    - cr1.8xlarge
+    - cc2.8xlarge
+    - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type, existing in the mapping.
+    Default: m3.large
+    Description: WebServer EC2 instance type
+    Type: String
+  pWebServerAMI:
+    Default: ami-60b6c60a
+    Description: 'Which webserver AMI do you want to use, default '
+    Type: String
+  stack1URL:
+    Default: https://s3.amazonaws.com/quickstart-reference/enterprise-accelerator/nist/latest/templates/stack1-access-01.json
+    Description: Valid S3 URL of location where Stack1 template exists
+    Type: String
+  stack2URL:
+    Default: https://s3.amazonaws.com/quickstart-reference/enterprise-accelerator/nist/latest/templates/stack2-network-01.json
+    Description: Valid S3 URL of location where Stack2 template exists
+    Type: String
+  stack3URL:
+    Default: https://s3.amazonaws.com/quickstart-reference/enterprise-accelerator/nist/latest/templates/stack3-resources-01.json
+    Description: Valid S3 URL of location where Stack3 template exists
+    Type: String
+  stack4URL:
+    Default: https://s3.amazonaws.com/quickstart-reference/enterprise-accelerator/nist/latest/templates/stack4-application-01.json
+    Description: Valid S3 URL of location where Stack4 template exists
+    Type: String
+Resources:
+  stack1:
+    Condition: CreateStack1
+    Properties:
+      Parameters:
+        pCreateCloudTrail:
+          Ref: pCreateCloudTrail
+        pNotifyEmail:
+          Ref: pNotifyEmail
+        pS3CloudTrailBucketExisting:
+          Ref: pS3CloudTrailBucketExisting
+        pS3CloudTrailLocal:
+          Ref: pS3CloudTrailLocal
+      TemplateURL:
+        Ref: stack1URL
+      TimeoutInMinutes: '20'
+    Type: AWS::CloudFormation::Stack
+  stack2:
+    Condition: CreateStack2
+    Properties:
+      Parameters:
+        pAppPrivateSubnetACIDR:
+          Ref: pAppPrivateSubnetACIDR
+        pAppPrivateSubnetBCIDR:
+          Ref: pAppPrivateSubnetBCIDR
+        pDBPrivateSubnetACIDR:
+          Ref: pDBPrivateSubnetACIDR
+        pDBPrivateSubnetBCIDR:
+          Ref: pDBPrivateSubnetBCIDR
+        pDMZSubnetACIDR:
+          Ref: pDMZSubnetACIDR
+        pDMZSubnetBCIDR:
+          Ref: pDMZSubnetBCIDR
+        pDevSubnetACIDR:
+          Fn::If:
+          - CreateVPCDevelopment
+          - Ref: pDevSubnetACIDR
+          - 'false'
+        pDevSubnetBCIDR:
+          Fn::If:
+          - CreateVPCDevelopment
+          - Ref: pDevSubnetBCIDR
+          - 'false'
+        pDevelopmentCIDR:
+          Fn::If:
+          - CreateVPCDevelopment
+          - Ref: pDevelopmentCIDR
+          - 'false'
+        pDevelopmentVPCName:
+          Ref: pDevelopmentVPCName
+        pKeyName:
+          Ref: pKeyName
+        pManagementCIDR:
+          Fn::If:
+          - CreateVPCManagement
+          - Ref: pManagementCIDR
+          - 'false'
+        pManagementSubnetACIDR:
+          Fn::If:
+          - CreateVPCManagement
+          - Ref: pManagementSubnetACIDR
+          - 'false'
+        pManagementSubnetBCIDR:
+          Fn::If:
+          - CreateVPCManagement
+          - Ref: pManagementSubnetBCIDR
+          - 'false'
+        pNatInstanceType:
+          Ref: pNatInstanceType
+        pProductionCIDR:
+          Ref: pProductionCIDR
+        pProductionVPCName:
+          Ref: pProductionVPCName
+        pRegionAZ1Name:
+          Ref: pRegionAZ1Name
+        pRegionAZ2Name:
+          Ref: pRegionAZ2Name
+        pRegionDomain:
+          Ref: pRegionDomain
+      TemplateURL:
+        Ref: stack2URL
+      TimeoutInMinutes: '20'
+    Type: AWS::CloudFormation::Stack
+  stack3:
+    Condition: CreateStack3
+    DependsOn: stack2
+    Properties:
+      Parameters:
+        pAppPrivateSubnetA:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rAppPrivateSubnetA
+        pAppPrivateSubnetB:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rAppPrivateSubnetB
+        pDMZSubnetA:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDMZSubnetA
+        pDMZSubnetB:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDMZSubnetB
+        pProductionCIDR:
+          Ref: pProductionCIDR
+        pProductionVPC:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rVPCProduction
+        pS3AppLogsBucketName:
+          Fn::If:
+          - CreateAppLogsBucket
+          - Ref: pAppLogsBucketName
+          - 'false'
+        pS3BackupBucketName:
+          Fn::If:
+          - CreateBackupBucket
+          - Ref: pBackupBucketName
+          - 'false'
+        pS3WebContentBucketName:
+          Fn::If:
+          - CreateWebAppBucket
+          - Ref: pWebContentBucketName
+          - 'false'
+        pVPCManagement:
+          Fn::If:
+          - CreateVPCManagement
+          - Fn::GetAtt:
+            - stack2
+            - Outputs.rVPCManagement
+          - 'false'
+      TemplateURL:
+        Ref: stack3URL
+      TimeoutInMinutes: '20'
+    Type: AWS::CloudFormation::Stack
+  stack4:
+    Condition: CreateStack4
+    DependsOn: stack3
+    Properties:
+      Parameters:
+        pAppAmi:
+          Ref: pAppAmi
+        pAppInstanceType:
+          Ref: pAppInstanceType
+        pAppPrivateSubnetA:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rAppPrivateSubnetA
+        pAppPrivateSubnetB:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rAppPrivateSubnetB
+        pDBAllocatedStorage:
+          Ref: pDBAllocatedStorage
+        pDBClass:
+          Ref: pDBClass
+        pDBName:
+          Ref: pDBName
+        pDBPassword:
+          Ref: pDBPassword
+        pDBPrivateSubnetA:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDBPrivateSubnetA
+        pDBPrivateSubnetB:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDBPrivateSubnetB
+        pDBUser:
+          Ref: pDBUser
+        pDMZSubnetA:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDMZSubnetA
+        pDMZSubnetB:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rDMZSubnetB
+        pKeyName:
+          Ref: pKeyName
+        pManagementSubnetA:
+          Fn::If:
+          - CreateVPCManagement
+          - Fn::GetAtt:
+            - stack2
+            - Outputs.rManagementSubnetA
+          - 'false'
+        pNatInstanceType:
+          Ref: pNatInstanceType
+        pProductionCIDR:
+          Ref: pProductionCIDR
+        pProductionVPC:
+          Fn::GetAtt:
+          - stack2
+          - Outputs.rVPCProduction
+        pRegionAZ1Name:
+          Ref: pRegionAZ1Name
+        pRegionAZ2Name:
+          Ref: pRegionAZ2Name
+        pSecurityGroupApp:
+          Fn::GetAtt:
+          - stack3
+          - Outputs.rSecurityGroupApp
+        pSecurityGroupMgmtBastionHost:
+          Fn::GetAtt:
+          - stack3
+          - Outputs.rSecurityGroupMgmtBastionHost
+        pSecurityGroupRDS:
+          Fn::GetAtt:
+          - stack3
+          - Outputs.rSecurityGroupRDS
+        pSecurityGroupWeb:
+          Fn::GetAtt:
+          - stack3
+          - Outputs.rSecurityGroupWeb
+        pWebInstanceType:
+          Ref: pWebInstanceType
+        pWebServerAMI:
+          Ref: pWebServerAMI
+      TemplateURL:
+        Ref: stack4URL
+      TimeoutInMinutes: '30'
+    Type: AWS::CloudFormation::Stack
+

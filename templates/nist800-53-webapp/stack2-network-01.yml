@@ -1,0 +1,974 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  cCreateVPCDevelopment:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pDevelopmentCIDR
+      - 'false'
+  cCreateVPCManagement:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pManagementCIDR
+      - 'false'
+Description: Provides networking configuration for a standard, public facing application,
+  with optional management and development VPCs
+Mappings:
+  AWSInstanceType2Arch:
+    c1.medium:
+      Arch: PV64
+    c1.xlarge:
+      Arch: PV64
+    c3.2xlarge:
+      Arch: HVM64
+    c3.4xlarge:
+      Arch: HVM64
+    c3.8xlarge:
+      Arch: HVM64
+    c3.large:
+      Arch: HVM64
+    c3.xlarge:
+      Arch: HVM64
+    cc2.8xlarge:
+      Arch: HVM64
+    cr1.8xlarge:
+      Arch: HVM64
+    g2.2xlarge:
+      Arch: HVMG2
+    hi1.4xlarge:
+      Arch: HVM64
+    hs1.8xlarge:
+      Arch: HVM64
+    i2.2xlarge:
+      Arch: HVM64
+    i2.4xlarge:
+      Arch: HVM64
+    i2.8xlarge:
+      Arch: HVM64
+    i2.xlarge:
+      Arch: HVM64
+    m1.large:
+      Arch: PV64
+    m1.medium:
+      Arch: PV64
+    m1.small:
+      Arch: PV64
+    m1.xlarge:
+      Arch: PV64
+    m2.2xlarge:
+      Arch: PV64
+    m2.4xlarge:
+      Arch: PV64
+    m2.xlarge:
+      Arch: PV64
+    m3.2xlarge:
+      Arch: HVM64
+    m3.large:
+      Arch: HVM64
+    m3.medium:
+      Arch: HVM64
+    m3.xlarge:
+      Arch: HVM64
+    r3.2xlarge:
+      Arch: HVM64
+    r3.4xlarge:
+      Arch: HVM64
+    r3.8xlarge:
+      Arch: HVM64
+    r3.large:
+      Arch: HVM64
+    r3.xlarge:
+      Arch: HVM64
+    t1.micro:
+      Arch: PV64
+    t2.medium:
+      Arch: HVM64
+    t2.micro:
+      Arch: HVM64
+    t2.small:
+      Arch: HVM64
+  AWSRegionArch2AMI:
+    ap-northeast-1:
+      HVM64: ami-35072834
+      HVMG2: ami-5dd1ff5c
+      PV64: ami-21072820
+    ap-southeast-1:
+      HVM64: ami-d6e1c584
+      HVMG2: ami-fabe9aa8
+      PV64: ami-20e1c572
+    ap-southeast-2:
+      HVM64: ami-fd4724c7
+      HVMG2: ami-e98ae9d3
+      PV64: ami-8b4724b1
+    cn-north-1:
+      HVM64: ami-ac57c595
+      HVMG2: NOT_SUPPORTED
+      PV64: ami-a857c591
+    eu-central-1:
+      HVM64: ami-b43503a9
+      HVMG2: ami-b03503ad
+      PV64: ami-a03503bd
+    eu-west-1:
+      HVM64: ami-748e2903
+      HVMG2: ami-00913777
+      PV64: ami-aa8f28dd
+    sa-east-1:
+      HVM64: ami-956cc688
+      HVMG2: NOT_SUPPORTED
+      PV64: ami-9d6cc680
+    us-east-1:
+      HVM64: ami-08842d60
+      HVMG2: ami-3a329952
+      PV64: ami-50842d38
+    us-gov-west-1:
+      HVM64: ami-79b9d85a
+      HVMG2: ami-7db9d85e
+      PV64: ami-7bb9d858
+    us-west-1:
+      HVM64: ami-cfa8a18a
+      HVMG2: ami-331b1376
+      PV64: ami-c7a8a182
+    us-west-2:
+      HVM64: ami-8786c6b7
+      HVMG2: ami-47296a77
+      PV64: ami-af86c69f
+Metadata:
+  Identifier:
+    Value: stack2-network-01
+  Input:
+    Description: CIDR blocks, VPC names, KeyName, EC2 instance size
+  Output:
+    Description: Outputs ID of all deployed resources
+  Stack:
+    Value: '2'
+  VersionDate:
+    Value: 09292015
+Outputs:
+  rAppPrivateSubnetA:
+    Value:
+      Ref: rAppPrivateSubnetA
+  rAppPrivateSubnetB:
+    Value:
+      Ref: rAppPrivateSubnetB
+  rDBPrivateSubnetA:
+    Value:
+      Ref: rDBPrivateSubnetA
+  rDBPrivateSubnetB:
+    Value:
+      Ref: rDBPrivateSubnetB
+  rDMZSubnetA:
+    Value:
+      Ref: rDMZSubnetA
+  rDMZSubnetB:
+    Value:
+      Ref: rDMZSubnetB
+  rManagementSubnetA:
+    Value:
+      Fn::If:
+      - cCreateVPCManagement
+      - Ref: rManagementSubnetA
+      - N/A
+  rManagementSubnetB:
+    Value:
+      Fn::If:
+      - cCreateVPCManagement
+      - Ref: rManagementSubnetB
+      - N/A
+  rSecurityGroupSSHFromProd:
+    Value:
+      Ref: rSecurityGroupSSHFromProd
+  rVPCManagement:
+    Value:
+      Fn::If:
+      - cCreateVPCManagement
+      - Ref: rVPCManagement
+      - N/A
+  rVPCProduction:
+    Value:
+      Ref: rVPCProduction
+Parameters:
+  pAppPrivateSubnetACIDR:
+    Default: 10.100.10.0/24
+    Description: CIDR block for Public AZ-1a subnet
+    Type: String
+  pAppPrivateSubnetBCIDR:
+    Default: 10.100.11.0/24
+    Description: CIDR block for Public AZ-1b subnet
+    Type: String
+  pDBPrivateSubnetACIDR:
+    Default: 10.100.20.0/24
+    Description: CIDR block for Private AZ-1a subnet
+    Type: String
+  pDBPrivateSubnetBCIDR:
+    Default: 10.100.21.0/24
+    Description: CIDR block for Private AZ-1b subnet
+    Type: String
+  pDMZSubnetACIDR:
+    Default: 10.100.1.0/24
+    Description: CIDR block for DMZ AZ-1b subnet
+    Type: String
+  pDMZSubnetBCIDR:
+    Default: 10.100.2.0/24
+    Description: CIDR block for DMZ AZ-1b subnet
+    Type: String
+  pDevSubnetACIDR:
+    Default: 10.20.1.0/24
+    Description: CIDR block for Development AZ-1a subnet
+    Type: String
+  pDevSubnetBCIDR:
+    Default: 10.20.2.0/24
+    Description: CIDR block for Development AZ-1b subnet
+    Type: String
+  pDevelopmentCIDR:
+    Default: 10.20.0.0/16
+    Description: CIDR block for Development VPC
+    Type: String
+  pDevelopmentVPCName:
+    Default: Development
+    Description: Development VPC Name
+    Type: String
+  pKeyName:
+    Default: ''
+    Description: Key Name for Instance
+    Type: String
+  pManagementCIDR:
+    Default: 10.10.0.0/16
+    Description: CIDR block for Management VPC
+    Type: String
+  pManagementSubnetACIDR:
+    Default: 10.10.1.0/24
+    Description: CIDR block for Management AZ-1a subnet
+    Type: String
+  pManagementSubnetBCIDR:
+    Default: 10.10.2.0/24
+    Description: CIDR block for Management AZ-1b subnet
+    Type: String
+  pManagementVPCName:
+    Default: Management
+    Description: Management VPC Name
+    Type: String
+  pNatInstanceType:
+    Default: t2.micro
+    Description: Nat EC2 instance type
+    Type: String
+  pProductionCIDR:
+    Default: 10.100.0.0/16
+    Description: CIDR block for Production VPC
+    Type: String
+  pProductionVPCName:
+    Default: Production
+    Description: Production VPC Name
+    Type: String
+  pRegionAZ1Name:
+    Default: us-east-1b
+    Description: Availability Zone 1 Name in Region
+    Type: String
+  pRegionAZ2Name:
+    Default: us-west-1c
+    Description: Availability Zone 2 Name in Region
+    Type: String
+  pRegionDomain:
+    Default: us-east-1.compute.internal
+    Description: Region name where resources will deploy
+    Type: String
+Resources:
+  AssociaterEIPManagementNAT:
+    Condition: cCreateVPCManagement
+    DependsOn: rManagementNATInstanceInterface
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - rEIPManagementNAT
+        - AllocationId
+      NetworkInterfaceId:
+        Ref: rManagementNATInstanceInterface
+    Type: AWS::EC2::EIPAssociation
+  AssociaterEIPProdNAT:
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - rEIPProdNAT
+        - AllocationId
+      NetworkInterfaceId:
+        Ref: rENIProductionNAT
+    Type: AWS::EC2::EIPAssociation
+  rAppPrivateSubnetA:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ1Name
+      CidrBlock:
+        Ref: pAppPrivateSubnetACIDR
+      Tags:
+      - Key: Name
+        Value: WebApp Subnet A
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rAppPrivateSubnetAssoicationA:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+      SubnetId:
+        Ref: rAppPrivateSubnetA
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rAppPrivateSubnetAssoicationB:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+      SubnetId:
+        Ref: rAppPrivateSubnetB
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rAppPrivateSubnetB:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ2Name
+      CidrBlock:
+        Ref: pAppPrivateSubnetBCIDR
+      Tags:
+      - Key: Name
+        Value: WebApp Subnet B
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rDBPrivateSubnetA:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ1Name
+      CidrBlock:
+        Ref: pDBPrivateSubnetACIDR
+      Tags:
+      - Key: Name
+        Value: DB Subnet A
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rDBPrivateSubnetB:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ2Name
+      CidrBlock:
+        Ref: pDBPrivateSubnetBCIDR
+      Tags:
+      - Key: Name
+        Value: DB Subnet B
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rDHCPOptionsAssocProd:
+    Properties:
+      DhcpOptionsId:
+        Ref: rDHCPoptions
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+  rDHCPoptions:
+    Properties:
+      DomainName:
+        Ref: pRegionDomain
+      DomainNameServers:
+      - AmazonProvidedDNS
+    Type: AWS::EC2::DHCPOptions
+  rDMZSubnetA:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ1Name
+      CidrBlock:
+        Ref: pDMZSubnetACIDR
+      Tags:
+      - Key: Name
+        Value: DMZ Subnet A
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rDMZSubnetB:
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ2Name
+      CidrBlock:
+        Ref: pDMZSubnetBCIDR
+      Tags:
+      - Key: Name
+        Value: DMZ Subnet B
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::Subnet
+  rDevSubnetA:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ1Name
+      CidrBlock:
+        Ref: pDevSubnetACIDR
+      Tags:
+      - Key: Name
+        Value: Development Subnet A
+      VpcId:
+        Ref: rVPCDevelopment
+    Type: AWS::EC2::Subnet
+  rDevSubnetAAssociation:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableDev
+      SubnetId:
+        Ref: rDevSubnetA
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rDevSubnetB:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ2Name
+      CidrBlock:
+        Ref: pDevSubnetBCIDR
+      Tags:
+      - Key: Name
+        Value: Development Subnet B
+      VpcId:
+        Ref: rVPCDevelopment
+    Type: AWS::EC2::Subnet
+  rDevSubnetBAssociation:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableDev
+      SubnetId:
+        Ref: rDevSubnetB
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rEIPManagementNAT:
+    Condition: cCreateVPCManagement
+    Properties:
+      Domain: vpc
+    Type: AWS::EC2::EIP
+  rEIPProdNAT:
+    Properties:
+      Domain: vpc
+    Type: AWS::EC2::EIP
+  rENIProductionNAT:
+    Properties:
+      Description: Interface for ProductionNat device
+      GroupSet:
+      - Ref: rSecurityGroupSSHFromProd
+      - Ref: rSecurityGroupProductionNAT
+      SubnetId:
+        Ref: rDMZSubnetA
+      Tags:
+      - Key: Network
+        Value: ProductionNatDevice
+    Type: AWS::EC2::NetworkInterface
+  rGWAttachmentDevIGW:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      InternetGatewayId:
+        Ref: rIGWDev
+      VpcId:
+        Ref: rVPCDevelopment
+    Type: AWS::EC2::VPCGatewayAttachment
+  rGWAttachmentMgmtIGW:
+    Condition: cCreateVPCManagement
+    Properties:
+      InternetGatewayId:
+        Ref: rIGWManagement
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::VPCGatewayAttachment
+  rGWAttachmentProdIGW:
+    DependsOn: rIGWProd
+    Properties:
+      InternetGatewayId:
+        Ref: rIGWProd
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::VPCGatewayAttachment
+  rIGWDev:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Development Internet Gateway
+    Type: AWS::EC2::InternetGateway
+  rIGWManagement:
+    Condition: cCreateVPCManagement
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Management Internet Gateway
+    Type: AWS::EC2::InternetGateway
+  rIGWProd:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Production Internet Gateway
+    Type: AWS::EC2::InternetGateway
+  rManagementNATInstance:
+    Condition: cCreateVPCManagement
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - AWSRegionArch2AMI
+        - Ref: AWS::Region
+        - Fn::FindInMap:
+          - AWSInstanceType2Arch
+          - Ref: pNatInstanceType
+          - Arch
+      InstanceType:
+        Ref: pNatInstanceType
+      KeyName:
+        Ref: pKeyName
+      NetworkInterfaces:
+      - DeviceIndex: '0'
+        NetworkInterfaceId:
+          Ref: rManagementNATInstanceInterface
+      SourceDestCheck: false
+      Tags:
+      - Key: Name
+        Value: Management VPC NAT Device for Patching
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - '#!/bin/sh
+
+              '
+            - 'echo 1 > /proc/sys/net/ipv4/ip_forward
+
+              '
+            - 'echo 0 > /proc/sys/net/ipv4/conf/eth0/send_redirects
+
+              '
+            - '/sbin/iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
+
+              '
+            - '/sbin/iptables-save > /etc/sysconfig/iptables
+
+              '
+            - 'mkdir -p /etc/sysctl.d/
+
+              '
+            - 'cat <<EOF > /etc/sysctl.d/nat.conf
+
+              '
+            - "net.ipv4.ip_forward = 1 \n"
+            - 'net.ipv4.conf.eth0.send_redirects = 0
+
+              '
+            - 'EOF
+
+              '
+    Type: AWS::EC2::Instance
+  rManagementNATInstanceInterface:
+    Condition: cCreateVPCManagement
+    Properties:
+      Description: Interface for Nat device
+      GroupSet:
+      - Ref: rSecurityGroupSSHFromMgmt
+      - Ref: rSecurityGroupManagementNAT
+      SubnetId:
+        Ref: rManagementSubnetA
+      Tags:
+      - Key: Network
+        Value: rManagementNATInstanceInterface
+    Type: AWS::EC2::NetworkInterface
+  rManagementSubnetA:
+    Condition: cCreateVPCManagement
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ1Name
+      CidrBlock:
+        Ref: pManagementSubnetACIDR
+      Tags:
+      - Key: Name
+        Value: Management Subnet A
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::Subnet
+  rManagementSubnetB:
+    Condition: cCreateVPCManagement
+    Properties:
+      AvailabilityZone:
+        Ref: pRegionAZ2Name
+      CidrBlock:
+        Ref: pManagementSubnetBCIDR
+      Tags:
+      - Key: Name
+        Value: Management Subnet B
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::Subnet
+  rNACLAssocAppPrivA:
+    Properties:
+      NetworkAclId:
+        Ref: rNACLProduction
+      SubnetId:
+        Ref: rAppPrivateSubnetA
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+  rNACLAssocDMZB:
+    Properties:
+      NetworkAclId:
+        Ref: rNACLProduction
+      SubnetId:
+        Ref: rDMZSubnetB
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+  rNACLProduction:
+    Properties:
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::NetworkAcl
+  rNACLRuleAllowAllEgress:
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      NetworkAclId:
+        Ref: rNACLProduction
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+    Type: AWS::EC2::NetworkAclEntry
+  rNACLRuleAllowAllIngress:
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      NetworkAclId:
+        Ref: rNACLProduction
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+    Type: AWS::EC2::NetworkAclEntry
+  rPeeringConnMgmtDev:
+    Condition: cCreateVPCDevelopment
+    DependsOn:
+    - rVPCDevelopment
+    Properties:
+      PeerVpcId:
+        Ref: rVPCDevelopment
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::VPCPeeringConnection
+  rPeeringConnMgmtProd:
+    Condition: cCreateVPCManagement
+    DependsOn:
+    - rVPCProduction
+    Properties:
+      PeerVpcId:
+        Ref: rVPCProduction
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::VPCPeeringConnection
+  rProductionNATInstance:
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - AWSRegionArch2AMI
+        - Ref: AWS::Region
+        - Fn::FindInMap:
+          - AWSInstanceType2Arch
+          - Ref: pNatInstanceType
+          - Arch
+      InstanceType:
+        Ref: pNatInstanceType
+      KeyName:
+        Ref: pKeyName
+      NetworkInterfaces:
+      - DeviceIndex: '0'
+        NetworkInterfaceId:
+          Ref: rENIProductionNAT
+      SourceDestCheck: false
+      Tags:
+      - Key: Name
+        Value: Production NAT Device for Patching
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - '#!/bin/sh
+
+              '
+            - 'echo 1 > /proc/sys/net/ipv4/ip_forward
+
+              '
+            - 'echo 0 > /proc/sys/net/ipv4/conf/eth0/send_redirects
+
+              '
+            - '/sbin/iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
+
+              '
+            - '/sbin/iptables-save > /etc/sysconfig/iptables
+
+              '
+            - 'mkdir -p /etc/sysctl.d/
+
+              '
+            - 'cat <<EOF > /etc/sysctl.d/nat.conf
+
+              '
+            - "net.ipv4.ip_forward = 1 \n"
+            - 'net.ipv4.conf.eth0.send_redirects = 0
+
+              '
+            - 'EOF
+
+              '
+    Type: AWS::EC2::Instance
+  rRouteAssocProdDMZA:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableMain
+      SubnetId:
+        Ref: rDMZSubnetA
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rRouteAssocProdDMZB:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableMain
+      SubnetId:
+        Ref: rDMZSubnetB
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rRouteDevIGW:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: rIGWDev
+      RouteTableId:
+        Ref: rRouteTableDev
+    Type: AWS::EC2::Route
+  rRouteMgmtDevPeering:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      DestinationCidrBlock:
+        Ref: pManagementCIDR
+      RouteTableId:
+        Ref: rRouteTableDev
+      VpcPeeringConnectionId:
+        Ref: rPeeringConnMgmtDev
+    Type: AWS::EC2::Route
+  rRouteMgmtIGW:
+    Condition: cCreateVPCManagement
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: rIGWManagement
+      RouteTableId:
+        Ref: rRouteTableMgmt
+    Type: AWS::EC2::Route
+  rRouteMgmtProdPeering:
+    Condition: cCreateVPCManagement
+    Properties:
+      DestinationCidrBlock:
+        Ref: pProductionCIDR
+      RouteTableId:
+        Ref: rRouteTableMgmt
+      VpcPeeringConnectionId:
+        Ref: rPeeringConnMgmtProd
+    Type: AWS::EC2::Route
+  rRouteProdIGW:
+    DependsOn: rGWAttachmentProdIGW
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: rIGWProd
+      RouteTableId:
+        Ref: rRouteTableMain
+    Type: AWS::EC2::Route
+  rRouteProdPrivateMgmtPeering:
+    Condition: cCreateVPCManagement
+    Properties:
+      DestinationCidrBlock:
+        Ref: pManagementCIDR
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+      VpcPeeringConnectionId:
+        Ref: rPeeringConnMgmtProd
+    Type: AWS::EC2::Route
+  rRouteProdPrivateNAT:
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      InstanceId:
+        Ref: rProductionNATInstance
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+    Type: AWS::EC2::Route
+  rRouteProdtoMgmtDMZ:
+    Condition: cCreateVPCManagement
+    Properties:
+      DestinationCidrBlock:
+        Ref: pManagementCIDR
+      RouteTableId:
+        Ref: rRouteTableMain
+      VpcPeeringConnectionId:
+        Ref: rPeeringConnMgmtProd
+    Type: AWS::EC2::Route
+  rRouteTableDev:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Route table for Development
+      VpcId:
+        Ref: rVPCDevelopment
+    Type: AWS::EC2::RouteTable
+  rRouteTableMain:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Route table for Production DMZ
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::RouteTable
+  rRouteTableMgmt:
+    Condition: cCreateVPCManagement
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Route table for Management VPC
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::RouteTable
+  rRouteTableProdPrivate:
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Route Table for Production Private Networks
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::RouteTable
+  rSecurityGroupManagementNAT:
+    Condition: cCreateVPCManagement
+    Properties:
+      GroupDescription: Allow Nat from Management VPC
+      SecurityGroupIngress:
+      - CidrIp:
+          Ref: pManagementCIDR
+        FromPort: '80'
+        IpProtocol: tcp
+        ToPort: '80'
+      - CidrIp:
+          Ref: pManagementCIDR
+        FromPort: '443'
+        IpProtocol: tcp
+        ToPort: '443'
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupProductionNAT:
+    Properties:
+      GroupDescription: Allow Nat from production
+      SecurityGroupIngress:
+      - CidrIp:
+          Ref: pProductionCIDR
+        FromPort: '80'
+        IpProtocol: tcp
+        ToPort: '80'
+      - CidrIp:
+          Ref: pProductionCIDR
+        FromPort: '443'
+        IpProtocol: tcp
+        ToPort: '443'
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupSSHFromMgmt:
+    Condition: cCreateVPCManagement
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - CidrIp:
+          Ref: pManagementCIDR
+        FromPort: '22'
+        IpProtocol: tcp
+        ToPort: '22'
+      VpcId:
+        Ref: rVPCManagement
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupSSHFromProd:
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - CidrIp:
+          Ref: pProductionCIDR
+        FromPort: '22'
+        IpProtocol: tcp
+        ToPort: '22'
+      VpcId:
+        Ref: rVPCProduction
+    Type: AWS::EC2::SecurityGroup
+  rVPCDevelopment:
+    Condition: cCreateVPCDevelopment
+    Properties:
+      CidrBlock:
+        Ref: pDevelopmentCIDR
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value:
+          Ref: pDevelopmentVPCName
+    Type: AWS::EC2::VPC
+  rVPCManagement:
+    Condition: cCreateVPCManagement
+    Properties:
+      CidrBlock:
+        Ref: pManagementCIDR
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value:
+          Ref: pManagementVPCName
+    Type: AWS::EC2::VPC
+  rVPCProduction:
+    Properties:
+      CidrBlock:
+        Ref: pProductionCIDR
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value:
+          Ref: pProductionVPCName
+    Type: AWS::EC2::VPC
+  rrRouteAssocDBPrivateA:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+      SubnetId:
+        Ref: rDBPrivateSubnetA
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rrRouteAssocDBPrivateB:
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableProdPrivate
+      SubnetId:
+        Ref: rDBPrivateSubnetB
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rrRouteAssocMgmtA:
+    Condition: cCreateVPCManagement
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableMgmt
+      SubnetId:
+        Ref: rManagementSubnetA
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  rrRouteAssocMgmtB:
+    Condition: cCreateVPCManagement
+    Properties:
+      RouteTableId:
+        Ref: rRouteTableMgmt
+      SubnetId:
+        Ref: rManagementSubnetB
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  subnetrNACLRuleAllowAllEgress:
+    Properties:
+      NetworkAclId:
+        Ref: rNACLProduction
+      SubnetId:
+        Ref: rAppPrivateSubnetB
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+  subnetrNACLRuleAllowAllIngress:
+    Properties:
+      NetworkAclId:
+        Ref: rNACLProduction
+      SubnetId:
+        Ref: rDMZSubnetA
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+

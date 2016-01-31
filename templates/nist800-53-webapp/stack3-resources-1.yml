@@ -1,0 +1,227 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  cCreateAppLogsBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pS3AppLogsBucketName
+      - 'false'
+  cCreateBackupBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pS3BackupBucketName
+      - 'false'
+  cCreateVPCManagement:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pVPCManagement
+      - 'false'
+  cCreateWebContentBucket:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: pS3WebContentBucketName
+      - 'false'
+Description: Provides S3 buckets, S3 Policies, Security Groups, and related resources
+Metadata:
+  Identifier:
+    Value: stack3-resources-01
+  Input:
+    Description: VPC, SubnetIDs, S3 bucket names, CIDR blocks
+  Output:
+    Description: Outputs ID of all deployed resources
+  Stack:
+    Value: '3'
+  VersionDate:
+    Value: 09292015
+Outputs:
+  rSecurityGroupApp:
+    Value:
+      Ref: rSecurityGroupApp
+  rSecurityGroupMgmtBastionHost:
+    Value:
+      Fn::If:
+      - cCreateVPCManagement
+      - Ref: rSecurityGroupMgmtBastionHost
+      - N/A
+  rSecurityGroupRDS:
+    Value:
+      Ref: rSecurityGroupRDS
+  rSecurityGroupWeb:
+    Value:
+      Ref: rSecurityGroupWeb
+Parameters:
+  pAppPrivateSubnetA:
+    Description: Existing WebApp Private Subnet A
+    Type: String
+  pAppPrivateSubnetB:
+    Description: Existing WebApp Private Subnet A
+    Type: String
+  pDMZSubnetA:
+    Description: DMZ Subnet A
+    Type: String
+  pDMZSubnetB:
+    Description: DMZ Subnet B
+    Type: String
+  pProductionCIDR:
+    Description: Production VPC CIDR
+    Type: String
+  pProductionVPC:
+    Description: Production VPC
+    Type: String
+  pS3AppLogsBucketName:
+    Description: Name of S3 Bucket to use for application logs (optional)
+    Type: String
+  pS3BackupBucketName:
+    Description: Name of S3 Bucket to use for backup/DR data (optional)
+    Type: String
+  pS3WebContentBucketName:
+    Description: Name of S3 Bucket to use for web content (optional)
+    Type: String
+  pVPCManagement:
+    Default: none
+    Description: Management VPC
+    Type: String
+Resources:
+  rAppLogsBucket:
+    Condition: cCreateAppLogsBucket
+    DeletionPolicy: Delete
+    Properties:
+      AccessControl: Private
+      BucketName:
+        Fn::Join:
+        - ''
+        - - Ref: pS3AppLogsBucketName
+          - '-'
+          - Ref: AWS::AccountId
+    Type: AWS::S3::Bucket
+  rBackupBucket:
+    Condition: cCreateBackupBucket
+    DeletionPolicy: Delete
+    Properties:
+      AccessControl: Private
+      BucketName:
+        Fn::Join:
+        - ''
+        - - Ref: pS3BackupBucketName
+          - '-'
+          - Ref: AWS::AccountId
+    Type: AWS::S3::Bucket
+  rSecurityGroupApp:
+    Properties:
+      GroupDescription: Security group for Appservers
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: '-1'
+      SecurityGroupIngress:
+      - CidrIp:
+          Ref: pProductionCIDR
+        FromPort: '443'
+        IpProtocol: tcp
+        ToPort: '443'
+      - CidrIp:
+          Ref: pProductionCIDR
+        FromPort: '80'
+        IpProtocol: tcp
+        ToPort: '80'
+      VpcId:
+        Ref: pProductionVPC
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupMgmtBastionHost:
+    Condition: cCreateVPCManagement
+    Properties:
+      GroupDescription: Security group for Bastion Host in DMZ
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: '-1'
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: '22'
+        IpProtocol: tcp
+        ToPort: '22'
+      - CidrIp: 0.0.0.0/0
+        FromPort: '3389'
+        IpProtocol: tcp
+        ToPort: '3389'
+      VpcId:
+        Ref: pVPCManagement
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupRDS:
+    Properties:
+      GroupDescription: Port 3306 database for access
+      SecurityGroupIngress:
+      - FromPort: '3306'
+        IpProtocol: tcp
+        SourceSecurityGroupId:
+          Ref: rSecurityGroupApp
+        ToPort: '3306'
+      VpcId:
+        Ref: pProductionVPC
+    Type: AWS::EC2::SecurityGroup
+  rSecurityGroupWeb:
+    Properties:
+      GroupDescription: Security group for Reverse Proxy in DMZ
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: '-1'
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: '443'
+        IpProtocol: tcp
+        ToPort: '443'
+      - CidrIp: 0.0.0.0/0
+        FromPort: '80'
+        IpProtocol: tcp
+        ToPort: '80'
+      VpcId:
+        Ref: pProductionVPC
+    Type: AWS::EC2::SecurityGroup
+  rWebContentBucket:
+    Condition: cCreateWebContentBucket
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: Private
+      BucketName:
+        Ref: pS3WebContentBucketName
+    Type: AWS::S3::Bucket
+  rWebContentS3Policy:
+    Condition: cCreateWebContentBucket
+    DependsOn: rWebContentBucket
+    Properties:
+      Bucket:
+        Ref: rWebContentBucket
+      PolicyDocument:
+        Statement:
+        - Action: s3:*
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+          Effect: Deny
+          Principal: '*'
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: pS3WebContentBucketName
+              - /*
+    Type: AWS::S3::BucketPolicy
+  rWebContentS3PolicySSE:
+    Condition: cCreateWebContentBucket
+    DependsOn: rWebContentS3Policy
+    Properties:
+      Bucket:
+        Ref: rWebContentBucket
+      PolicyDocument:
+        Statement:
+        - Action: s3:PutObject
+          Condition:
+            StringNotEquals:
+              s3:x-amz-server-side-encryption: AES256
+          Effect: Deny
+          Principal: '*'
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: pS3WebContentBucketName
+              - /*
+    Type: AWS::S3::BucketPolicy
+
