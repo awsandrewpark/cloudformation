@@ -172,7 +172,7 @@ Parameters:
     Description: WebApp Subnet A
     Type: String
   pAppPrivateSubnetB:
-    Description: WebApp Subnet A
+    Description: WebApp Subnet B
     Type: String
   pDBAllocatedStorage:
     Description: Allocated Storage (in GB) for RDS instance
@@ -794,4 +794,3 @@ Resources:
       VPCSecurityGroups:
       - Ref: pSecurityGroupRDS
     Type: AWS::RDS::DBInstance
-
