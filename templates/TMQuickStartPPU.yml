@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: (0011) - v2 Quick Start that deploys Trend Micro Deep Security into an
+  exisintg VPC with a Multi-AZ Oracle RDS instance  **WARNING** This template uses
+  images from the AWS Marketplace and an active subscription is required - Please
+  see the Quick Start documentation for more details. You will be billed for the AWS
+  resources used if you create a stack from this template.
+Mappings:
+  EC2InstanceSize:
+    1-25:
+      TYPE: m3.large
+    101-200:
+      TYPE: c3.4xlarge
+    26-50:
+      TYPE: m3.xlarge
+    51-100:
+      TYPE: m3.2xlarge
+  PPULicenseSize:
+    1-25:
+      Size: '25'
+    101-200:
+      Size: '200'
+    26-50:
+      Size: '50'
+    51-100:
+      Size: '100'
+  RDSInstanceSize:
+    ap-northeast-1:
+      Oracle: db.m4.large
+    ap-southeast-1:
+      Oracle: db.m4.large
+    ap-southeast-2:
+      Oracle: db.m3.large
+    eu-central-1:
+      Oracle: db.m4.large
+    eu-west-1:
+      Oracle: db.m4.large
+    sa-east-1:
+      Oracle: db.m3.large
+    us-east-1:
+      Oracle: db.m4.large
+    us-west-1:
+      Oracle: db.m4.large
+    us-west-2:
+      Oracle: db.m4.large
+  RDSStorageSize:
+    1-25:
+      Size: '25'
+    101-200:
+      Size: '200'
+    26-50:
+      Size: '50'
+    51-100:
+      Size: '100'
+Outputs:
+  DeepSecurityConsole:
+    Value:
+      Fn::GetAtt:
+      - MasterMP96
+      - Outputs.DeepSecurityConsole
+Parameters:
+  AWSKeyPairName:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Select an existing EC2 Key Pair.
+    Description: Select an existing key pair to use for connecting to your Deep Security
+      Manager Instance.
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::KeyPair::KeyName
+  AWSVPC:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    Description: Select an existing VPC to deploy Deep Security Manager.
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::VPC::Id
+  DatabaseSubnet1:
+    ConstraintDescription: RDS Subnet Groups must be comprised of 2 subnets in seperate
+      availability zones within the specified VPC for deploying this template
+    Description: Select a private subnet for the RDS database.  Must be a private
+      subnet contained the in VPC chosen above.
+    Type: AWS::EC2::Subnet::Id
+  DatabaseSubnet2:
+    ConstraintDescription: RDS Subnet Groups must be comprised of 2 subnets in seperate
+      availability zones within the specified VPC for deploying this template
+    Description: Select a second private subnet for the RDS database.  Must be a private
+      subnet contained the in VPC chosen above.
+    Type: AWS::EC2::Subnet::Id
+  DeepSecurityAdminName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric
+      characters. Min length 1, max length 16
+    Default: MasterAdmin
+    Description: The Deep Security Manager administrator username for Web Console
+      Access.
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: false
+    Type: String
+  DeepSecurityAdminPass:
+    AllowedPattern: '[a-zA-Z0-9!$^*-_+]*'
+    ConstraintDescription: Can only contain alphanumeric characters or the following
+      special characters !$^*-_+ Min length 8, max length 41
+    Description: The Deep Security Manager administrator password. Must be 8-41 characters
+      long and can only contain alphanumeric characters or the following special characters
+      !$^*-_+
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DeepSecuritySubnet:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Subnet ID must exist in the chosen VPC
+    Description: Select an existing Subnet for Deep Seucurity Manager. Must be a public
+      subnet contained the in VPC chosen above.
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::Subnet::Id
+  ProtectedInstances:
+    AllowedValues:
+    - 1-25
+    - 26-50
+    - 51-100
+    - 101-200
+    Description: Select how many instances would you like to protect.
+    Type: String
+Resources:
+  MasterMP96:
+    Properties:
+      Parameters:
+        AWSIKeyPairName:
+          Ref: AWSKeyPairName
+        AWSIVPC:
+          Ref: AWSVPC
+        DBICAdminName: dsmadmin
+        DBICAdminPassword:
+          Ref: DeepSecurityAdminPass
+        DBIInstanceIdentifier: deep-security
+        DBIRDSInstanceSize:
+          Fn::FindInMap:
+          - RDSInstanceSize
+          - Ref: AWS::Region
+          - Oracle
+        DBIStorageAllocation:
+          Fn::FindInMap:
+          - RDSStorageSize
+          - Ref: ProtectedInstances
+          - Size
+        DBISubnet1:
+          Ref: DatabaseSubnet1
+        DBISubnet2:
+          Ref: DatabaseSubnet2
+        DBPBackupDays: '5'
+        DBPCreateDbInstance: 'Yes'
+        DBPEndpoint: ''
+        DBPEngine: Oracle
+        DBPMultiAZ: 'true'
+        DBPName: dsm
+        DSCAdminName:
+          Ref: DeepSecurityAdminName
+        DSCAdminPassword:
+          Ref: DeepSecurityAdminPass
+        DSIMultiNode: '1'
+        DSIPGUIPort: '443'
+        DSIPHeartbeatPort: '4120'
+        DSIPInstanceType:
+          Fn::FindInMap:
+          - EC2InstanceSize
+          - Ref: ProtectedInstances
+          - TYPE
+        DSIPLicense:
+          Fn::FindInMap:
+          - PPULicenseSize
+          - Ref: ProtectedInstances
+          - Size
+        DSIPLicenseKey: XX-XXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+        DSISubnetID:
+          Ref: DeepSecuritySubnet
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/MasterMP96.template
+    Type: AWS::CloudFormation::Stack
+

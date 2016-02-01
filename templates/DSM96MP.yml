@@ -1,0 +1,955 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  AddAcAnswer:
+    Fn::And:
+    - Condition: KeyProvided
+    - Condition: UseBYOL
+  AddNodePlusELB:
+    Fn::And:
+    - Fn::Not:
+      - Condition: IsFirstNode
+    - Condition: AddToELB
+  AddToELB:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: DSIELB
+      - ''
+  DBTypeIsEmbedded:
+    Fn::Equals:
+    - Ref: DBPEngine
+    - Embedded
+  DBTypeIsOracle:
+    Fn::Equals:
+    - Ref: DBPEngine
+    - Oracle
+  DBTypeIsSQL:
+    Fn::Equals:
+    - Ref: DBPEngine
+    - SQL
+  DoSQLSetup:
+    Fn::And:
+    - Condition: DBTypeIsSQL
+    - Condition: IsFirstNode
+  IsFirstNode:
+    Fn::Equals:
+    - Ref: DSMPMNode
+    - 'No'
+  IsFirstNodePlusELB:
+    Fn::And:
+    - Condition: IsFirstNode
+    - Condition: AddToELB
+  KeyProvided:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: DSIPLicenseKey
+      - XX-XXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+  SQLplusELB:
+    Fn::And:
+    - Condition: AddToELB
+    - Condition: DoSQLSetup
+  UseBYOL:
+    Fn::Equals:
+    - Ref: DSIPLicense
+    - BYOL
+  WaitNotProvided:
+    Fn::Equals:
+    - DSM1CompleteWaitHandle
+    - ''
+Description: 'v2016-01-08: Deploys Deep Security Manager to AWS. This template is
+  designed to be nested in a stack, and requires several passed parameters to launch.
+  **WARNING** This template creates Amazon EC2 instances and related resources. You
+  will be billed for the AWS resources used if you create a stack from this template.'
+Mappings:
+  DSMAMI:
+    ap-northeast-1:
+      '100': ami-fcd548fc
+      '200': ami-fcd548fc
+      '25': ami-fcd548fc
+      '50': ami-fcd548fc
+      BYOL: ami-0cd4490c
+    ap-southeast-1:
+      '100': ami-507d6a02
+      '200': ami-507d6a02
+      '25': ami-507d6a02
+      '50': ami-507d6a02
+      BYOL: ami-447d6a16
+    ap-southeast-2:
+      '100': ami-072d643d
+      '200': ami-072d643d
+      '25': ami-072d643d
+      '50': ami-072d643d
+      BYOL: ami-052d643f
+    eu-central-1:
+      '100': ami-0c8c8f11
+      '200': ami-0c8c8f11
+      '25': ami-0c8c8f11
+      '50': ami-0c8c8f11
+      BYOL: ami-e28d8eff
+    eu-west-1:
+      '100': ami-45a48d32
+      '200': ami-45a48d32
+      '25': ami-45a48d32
+      '50': ami-45a48d32
+      BYOL: ami-f1a58c86
+    sa-east-1:
+      '100': ami-9116828c
+      '200': ami-9116828c
+      '25': ami-9116828c
+      '50': ami-9116828c
+      BYOL: ami-9f168282
+    us-east-1:
+      '100': ami-69c4ba0c
+      '200': ami-69c4ba0c
+      '25': ami-69c4ba0c
+      '50': ami-69c4ba0c
+      BYOL: ami-7fc4ba1a
+    us-west-1:
+      '100': ami-3983447d
+      '200': ami-3983447d
+      '25': ami-3983447d
+      '50': ami-3983447d
+      BYOL: ami-25834461
+    us-west-2:
+      '100': ami-272f3717
+      '200': ami-272f3717
+      '25': ami-272f3717
+      '50': ami-272f3717
+      BYOL: ami-df2e36ef
+  DSMDBMap:
+    Embedded:
+      DbTypeString: Embedded
+    Oracle:
+      DbTypeString: Oracle
+    SQL:
+      DbTypeString: Microsoft SQL Server
+  DSMSIZE:
+    '100':
+      TYPE: m3.2xlarge
+    '200':
+      TYPE: c3.4xlarge
+    '25':
+      TYPE: m3.large
+    '50':
+      TYPE: m3.xlarge
+    BYOL:
+      TYPE: c3.2xlarge
+  TrendRegionMap:
+    ap-northeast-1:
+      regionkey: amazon.cloud.region.key.6
+    ap-southeast-1:
+      regionkey: amazon.cloud.region.key.5
+    ap-southeast-2:
+      regionkey: amazon.cloud.region.key.8
+    eu-central-1:
+      regionkey: amazon.cloud.region.key.9
+    eu-west-1:
+      regionkey: amazon.cloud.region.key.4
+    sa-east-1:
+      regionkey: amazon.cloud.region.key.7
+    us-east-1:
+      regionkey: amazon.cloud.region.key.1
+    us-west-1:
+      regionkey: amazon.cloud.region.key.3
+    us-west-2:
+      regionkey: amazon.cloud.region.key.2
+Outputs:
+  DSMFQDN:
+    Value:
+      Fn::GetAtt:
+      - DSM
+      - PublicDnsName
+  DSMInstanceId:
+    Value:
+      Ref: DSM
+  DSMURL:
+    Value:
+      Fn::Join:
+      - ''
+      - - https://
+        - Fn::GetAtt:
+          - DSM
+          - PublicDnsName
+        - ':'
+        - Ref: DSIPGUIPort
+Parameters:
+  AWSIKeyPairName:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Select an existing EC2 Key Pair.
+    Description: Existing key pair to use for connecting to your Deep Security Manager
+      Instance
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::KeyPair::KeyName
+  AWSIVPC:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    Description: Existing VPC to deploy Deep Security Manager
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::VPC::Id
+  CreateEIP:
+    AllowedValues:
+    - 'True'
+    - 'False'
+    Default: 'True'
+    Description: Allocate an EIP and associate it with this Deep Security Manager
+      Instance. Recommend set to true unless deploying behind an ELB
+    Type: String
+  DBICAdminName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: dsadmin
+    Description: Admin account username to be used for the database instance
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: false
+    Type: String
+  DBICAdminPassword:
+    AllowedPattern: '[a-zA-Z0-9!$^*-_+]*'
+    ConstraintDescription: Can only contain alphanumeric characters or the following
+      special characters !$^*-_+ Min length 8, max length 41
+    Description: Password to be used for the database admin account
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DBPEngine:
+    AllowedValues:
+    - Embedded
+    - Oracle
+    - SQL
+    Default: Embedded
+    Type: String
+  DBPName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: dsm
+    Description: Name to be assigned to the database
+    MaxLength: 64
+    MinLength: 1
+    Type: String
+  DBPRDSEndpoint:
+    Default: RDS.FQDN.domain
+    Description: FQDN or IP of RDS Endpoint
+    MaxLength: '64'
+    MinLength: '1'
+    Type: String
+  DSCAdminName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: MasterAdmin
+    Description: The Deep Security Manager administrator account username for Web
+      Console Access
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: false
+    Type: String
+  DSCAdminPassword:
+    AllowedPattern: '[a-zA-Z0-9!$^*-_+]*'
+    ConstraintDescription: Can only contain alphanumeric characters or the following
+      special characters !$^*-_+ Min length 8, max length 41
+    Description: The Deep Security Manager administrator account password
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DSIELB:
+    Default: ''
+    Type: String
+  DSIELBFQDN:
+    Default: ''
+    Type: String
+  DSIPGUIPort:
+    ConstraintDescription: Must be a valid TCP port.
+    Default: '4119'
+    Description: The Deep Security Manager application and GUI port.
+    MaxValue: 65535
+    MinValue: 0
+    Type: Number
+  DSIPHeartbeatPort:
+    ConstraintDescription: Must be a valid TCP port.
+    Default: '4120'
+    Description: The heartbeat port used by Deep Security Agents and appliances to
+      communicate with the Deep Security Manager.
+    MaxValue: 65535
+    MinValue: 0
+    Type: Number
+  DSIPInstanceType:
+    AllowedValues:
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - g2.2xlarge
+    Default: m3.large
+    Description: Amazon EC2 instance type for the Deep Security Manager Node Instances
+    Type: String
+  DSIPLicense:
+    AllowedValues:
+    - BYOL
+    - '25'
+    - '50'
+    - '100'
+    - '200'
+    Description: Choose License Model. If choosing BYOL you may enter the license
+      below
+    Type: String
+  DSIPLicenseKey:
+    AllowedPattern: '[A-Z0-9]{2}-[A-Z0-9]{4}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}'
+    ConstraintDescription: Key can only contain ASCII characters.
+    Default: XX-XXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+    Description: Deep Security License key including dashes (e.g. AP-E9RM-99WHE-B5UR5-BV8YB-HVYM8-HYYVG)
+    MaxLength: 37
+    MinLength: 37
+    Type: String
+  DSISubnetID:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Subnet ID must exist in the chosen VPC
+    Description: Existing Subnet for Deep Seucurity Manager. Must be a public subnet
+      contained the in VPC chosen above.
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::Subnet::Id
+  DSM1CompleteWaitHandle:
+    Default: ''
+    Type: String
+  DSMPMNode:
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'No'
+    Description: Select whether this is an additional node to be added to an existing
+      Deep Security Manager Infrastructure
+    Type: String
+  DSMSG:
+    Type: AWS::EC2::SecurityGroup::Id
+  PrivateDSIELB:
+    Default: ''
+    Type: String
+  PrivateDSIELBFQDN:
+    Default: ''
+    Type: String
+Resources:
+  AccessKeys:
+    Properties:
+      UserName:
+        Ref: DSIAMUser
+    Type: AWS::IAM::AccessKey
+  DSIAMGroup:
+    Type: AWS::IAM::Group
+  DSIAMUser:
+    Properties: {}
+    Type: AWS::IAM::User
+  DSM:
+    Metadata:
+      AWS::CloudFormation::Init:
+        addCloudAccount:
+          commands:
+            0-sleep:
+              command: /bin/sleep 60
+            1-enableRestApi:
+              command: /opt/dsm/dsm_c -action changesetting -name settings.configuration.statusMonitoringAPIEnabled
+                -value true
+            2-enableSoapApi:
+              command: /opt/dsm/dsm_c -action changesetting -name settings.configuration.webserviceAPIEnabled
+                -value true
+            3-sleep:
+              command: /bin/sleep 30
+            4-check-service:
+              command: service dsm_s start
+            5-set-aia-settings:
+              command:
+                Fn::Join:
+                - ''
+                - - '/etc/cfn/set-aiaSettings '
+                  - Ref: DSCAdminName
+                  - ' '
+                  - Ref: DSCAdminPassword
+                  - ' '
+                  - Ref: PrivateDSIELBFQDN
+                  - ' '
+                  - Ref: DSIPGUIPort
+                  - ' >> /tmp/set-aiaSettings.log'
+            8-addCloudAccount:
+              command:
+                Fn::Join:
+                - ''
+                - - 'export sID=`curl -k -X POST -H "Content-Type:application/json"
+                    -d ''{ "dsCredentials": {"userName": '
+                  - Ref: DSCAdminName
+                  - ', "password": '
+                  - Ref: DSCAdminPassword
+                  - '}}'' https://localhost:'
+                  - Ref: DSIPGUIPort
+                  - '/rest/authentication/login`; '
+                  - curl -k -X POST -H "Content-Type:application/json" -d '{"createCloudAccountRequest":{"sessionId":"'"${sID}"'","cloudAccountElement":{"accessKey":"
+                  - Ref: AccessKeys
+                  - '","cloudRegion":"'
+                  - Fn::FindInMap:
+                    - TrendRegionMap
+                    - Ref: AWS::Region
+                    - regionkey
+                  - '","cloudType":"AMAZON","name":"Amazon","azureCertificate":"","secretKey":"'
+                  - Fn::GetAtt:
+                    - AccessKeys
+                    - SecretAccessKey
+                  - '"}}}'' https://localhost:'
+                  - Ref: DSIPGUIPort
+                  - '/rest/cloudaccounts; '
+                  - 'curl -k -X DELETE https://localhost:'
+                  - Ref: DSIPGUIPort
+                  - /rest/authentication/logout?sID="${sID}"
+              ignoreErrors: 'False'
+          files:
+            /etc/cfn/set-aiaSettings:
+              mode: '000700'
+              owner: root
+              source: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/set-aiaSettings
+        addToELB:
+          commands:
+            0-add-instance-to-elb:
+              command:
+                Fn::Join:
+                - ''
+                - - 'aws elb register-instances-with-load-balancer --load-balancer '
+                  - Ref: DSIELB
+                  - ' --instances $(curl http://169.254.169.254/latest/meta-data/instance-id/)
+                    --region '
+                  - Ref: AWS::Region
+              ignoreErrors: 'false'
+            1-add-instance-to-internal-elb:
+              command:
+                Fn::Join:
+                - ''
+                - - 'aws elb register-instances-with-load-balancer --load-balancer '
+                  - Ref: PrivateDSIELB
+                  - ' --instances $(curl http://169.254.169.254/latest/meta-data/instance-id/)
+                    --region '
+                  - Ref: AWS::Region
+              ignoreErrors: 'false'
+        configSets:
+          addDsmNode:
+          - setup
+          - prepDSMInstall
+          - installDSM
+          - fixManagerHostObject
+          default:
+          - setup
+          - prepDSMInstall
+          - installDSM
+          - addCloudAccount
+          - fixManagerHostObject
+          doSqlSetup:
+          - sqlSetup
+          fixManagerHostObject:
+          - fixManagerHostObject
+          fixManagerLbSettings:
+          - fixManagerLoadBalancerSettings
+          fixManagerLocalLbAddress:
+          - fixManagerLocalLoadBalancerHostsFile
+          setupGlobalELB:
+          - fixManagerLoadBalancerSettings
+          setupLocalELB:
+          - addToELB
+          - fixManagerLocalLoadBalancerHostsFile
+        fixManagerHostObject:
+          commands:
+            0-install-xml_grep:
+              command: yum -y install perl-XML-Twig
+            1-reactivate-manager:
+              command:
+                Fn::Join:
+                - ''
+                - - '/etc/cfn/reactivate-manager >> /etc/cfn/reactivate-manager.log '
+                  - Ref: DSCAdminName
+                  - ' '
+                  - Ref: DSCAdminPassword
+                  - ' '
+                  - Ref: DSIPGUIPort
+          files:
+            /etc/cfn/reactivate-manager:
+              mode: '000700'
+              owner: root
+              source: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/reactivate-manager
+        fixManagerLoadBalancerSettings:
+          commands:
+            0-setup-internal-elb-listener:
+              command:
+                Fn::Join:
+                - ''
+                - - '/etc/cfn/create-console-listener '
+                  - Ref: PrivateDSIELB
+                  - ' '
+                  - Ref: PrivateDSIELBFQDN
+                  - ' '
+                  - Ref: DSIPGUIPort
+                  - ' '
+                  - Ref: AWS::StackName
+                  - ' '
+                  - '1 '
+                  - Ref: AWS::Region
+                  - ' >> /tmp/internallistener.log'
+            1-setup-external-elb-listener:
+              command:
+                Fn::Join:
+                - ''
+                - - '/etc/cfn/create-console-listener '
+                  - Ref: DSIELB
+                  - ' '
+                  - Ref: DSIELBFQDN
+                  - ' '
+                  - Ref: DSIPGUIPort
+                  - ' '
+                  - Ref: AWS::StackName
+                  - ' '
+                  - '0 '
+                  - Ref: AWS::Region
+                  - ' >> /tmp/internallistener.log'
+            4-set-load-balancer-settings:
+              command:
+                Fn::Join:
+                - ''
+                - - '/etc/cfn/set-lbSettings '
+                  - Ref: DSCAdminName
+                  - ' '
+                  - Ref: DSCAdminPassword
+                  - ' '
+                  - Ref: PrivateDSIELBFQDN
+                  - ' '
+                  - Ref: DSIPGUIPort
+                  - ' '
+                  - Ref: DSIPHeartbeatPort
+                  - ' >> /tmp/set-lbSettings.log'
+          files:
+            /etc/cfn/create-console-listener:
+              mode: '000700'
+              owner: root
+              source: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/create-console-listener
+            /etc/cfn/set-lbSettings:
+              mode: '000700'
+              owner: root
+              source: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/set-lbSettings
+        fixManagerLocalLoadBalancerHostsFile:
+          commands:
+            0-setHostsFilePrivateELB:
+              command:
+                Fn::Join:
+                - ''
+                - - echo "
+                  - $(curl http://169.254.169.254/latest/meta-data/local-ipv4/)
+                  - ' '
+                  - Ref: PrivateDSIELBFQDN
+                  - '" >> /etc/hosts'
+            1-setHostsFilePublicELB:
+              command:
+                Fn::Join:
+                - ''
+                - - echo "
+                  - $(curl http://169.254.169.254/latest/meta-data/local-ipv4/)
+                  - ' '
+                  - Ref: DSIELBFQDN
+                  - '" >> /etc/hosts'
+        installDSM:
+          commands:
+            0-sethostnameinprops:
+              command:
+                Fn::Join:
+                - ''
+                - - 'echo '
+                  - '"AddressAndPortsScreen.ManagerAddress=$(curl http://169.254.169.254/latest/meta-data/local-ipv4/)"
+                    >> /etc/cfn/dsmConfiguration.properties'
+              ignoreErrors: 'false'
+            1-install-DSM:
+              command: cd /opt/trend/packages/dsm/default/; sh /opt/trend/packages/dsm/default/Manager-AWS-9.6.2980.x64.sh
+                -q -console -varfile /etc/cfn/dsmConfiguration.properties >> /tmp/dsmInstallLog
+              ignoreErrors: 'false'
+        prepDSMInstall:
+          files:
+            /etc/cfn/dsmConfiguration.properties:
+              content:
+                Fn::Join:
+                - ''
+                - - Fn::If:
+                    - AddAcAnswer
+                    - Fn::Join:
+                      - ''
+                      - - LicenseScreen.License.-1=
+                        - Ref: DSIPLicenseKey
+                    - '
+
+                      '
+                  - '
+
+                    '
+                  - CredentialsScreen.Administrator.Username=
+                  - Ref: DSCAdminName
+                  - '
+
+                    '
+                  - CredentialsScreen.Administrator.Password=
+                  - Ref: DSCAdminPassword
+                  - '
+
+                    '
+                  - 'CredentialsScreen.UseStrongPasswords=False
+
+                    '
+                  - 'Dinstall4j.language=en
+
+                    '
+                  - DatabaseScreen.DatabaseType=
+                  - Fn::FindInMap:
+                    - DSMDBMap
+                    - Ref: DBPEngine
+                    - DbTypeString
+                  - '
+
+                    '
+                  - DatabaseScreen.Hostname=
+                  - Ref: DBPRDSEndpoint
+                  - '
+
+                    '
+                  - DatabaseScreen.DatabaseName=
+                  - Ref: DBPName
+                  - '
+
+                    '
+                  - 'DatabaseScreen.Transport=TCP
+
+                    '
+                  - DatabaseScreen.Username=
+                  - Ref: DBICAdminName
+                  - '
+
+                    '
+                  - DatabaseScreen.Password=
+                  - Ref: DBICAdminPassword
+                  - '
+
+                    '
+                  - AddressAndPortsScreen.ManagerPort=
+                  - Ref: DSIPGUIPort
+                  - '
+
+                    '
+                  - AddressAndPortsScreen.HeartbeatPort=
+                  - Ref: DSIPHeartbeatPort
+                  - '
+
+                    '
+                  - Fn::If:
+                    - IsFirstNode
+                    - 'AddressAndPortsScreen.NewNode=false
+
+                      '
+                    - 'AddressAndPortsScreen.NewNode=true
+
+                      UpgradeVerificationScreen.Overwrite=False
+
+                      '
+                  - 'SecurityUpdateScreen.UpdateComponents=true
+
+                    '
+                  - 'SecurityUpdateScreen.UpdateSoftware=true
+
+                    '
+                  - 'SmartProtectionNetworkScreen.EnableFeedback=false
+
+                    '
+                  - 'SmartProtectionNetworkScreen.IndustryType=blank
+
+                    '
+                  - 'RelayScreen.Install=True
+
+                    '
+                  - 'RelayScreen.ProxyType=None
+
+                    '
+                  - 'RelayScreen.ProxyPort=None
+
+                    '
+                  - 'RelayScreen.Proxy=False
+
+                    '
+                  - 'RelayScreen.AntiMalware=True
+
+                    '
+                  - 'RelayScreen.ProxyAuthentication=False
+
+                    '
+              mode: '000600'
+              owner: root
+            /opt/trend/packages/dsm/default/Agent-RedHat_EL6-9.6.1-1308.x86_64.zip:
+              mode: '000600'
+              owner: root
+              source: http://files.trendmicro.com/products/deepsecurity/en/9.6/Agent-RedHat_EL6-9.6.1-1308.x86_64.zip
+            /opt/trend/packages/dsm/default/Agent-amzn1-9.6.1-1308.x86_64.zip:
+              mode: '000600'
+              owner: root
+              source: http://files.trendmicro.com/products/deepsecurity/en/9.6/Agent-amzn1-9.6.1-1308.x86_64.zip
+            /opt/trend/packages/dsm/default/KernelSupport-RedHat_EL6-9.6.1-1628.x86_64.zip:
+              mode: '000600'
+              owner: root
+              source: http://files.trendmicro.com/products/deepsecurity/en/9.6/KernelSupport-RedHat_EL6-9.6.1-1628.x86_64.zip
+            /opt/trend/packages/dsm/default/KernelSupport-amzn1-9.6.1-1540.x86_64.zip:
+              mode: '000600'
+              owner: root
+              source: http://files.trendmicro.com/products/deepsecurity/en/9.6/KernelSupport-amzn1-9.6.1-1540.x86_64.zip
+        setup:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content:
+                Fn::Join:
+                - ''
+                - - '[main]
+
+                    '
+                  - stack=
+                  - Ref: AWS::StackId
+                  - '
+
+                    '
+                  - region=
+                  - Ref: AWS::Region
+                  - '
+
+                    '
+              group: root
+              mode: '000400'
+              owner: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content:
+                Fn::Join:
+                - ''
+                - - '[cfn-auto-reloader-hook]
+
+                    '
+                  - 'triggers=post.update
+
+                    '
+                  - 'path=Resources.DSM.Metadata.AWS::CloudFormation::Init
+
+                    '
+                  - 'action=/opt/aws/bin/cfn-init -v -c updateDSM --stack '
+                  - Ref: AWS::StackId
+                  - ' --resource DSM1'
+                  - ' --region '
+                  - Ref: AWS::Region
+                  - ' runas=root
+
+                    '
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                - /etc/cfn/cfn-hup.conf
+                - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        sqlSetup:
+          commands:
+            1-get-create-script:
+              command: cd /etc/cfn/rhel-scripts; wget https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/create-DSM-SqlDB.py;
+                chmod 755 create-DSM-SqlDB.py
+              ignoreErrors: 'false'
+            2-create-db:
+              command:
+                Fn::Join:
+                - ''
+                - - 'cd /etc/cfn/rhel-scripts; python create-DSM-SqlDB.py --user '
+                  - Ref: DBICAdminName
+                  - ' --pass '
+                  - Ref: DBICAdminPassword
+                  - ' --endpoint '
+                  - Ref: DBPRDSEndpoint
+                  - ' --dbname '
+                  - Ref: DBPName
+              ignoreErrors: 'false'
+    Properties:
+      IamInstanceProfile:
+        Ref: DSMProfile
+      ImageId:
+        Fn::FindInMap:
+        - DSMAMI
+        - Ref: AWS::Region
+        - Ref: DSIPLicense
+      InstanceType:
+        Fn::If:
+        - UseBYOL
+        - Ref: DSIPInstanceType
+        - Fn::FindInMap:
+          - DSMSIZE
+          - Ref: DSIPLicense
+          - TYPE
+      KeyName:
+        Ref: AWSIKeyPairName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'true'
+        DeviceIndex: '0'
+        GroupSet:
+        - Ref: DSMSG
+        SubnetId:
+          Ref: DSISubnetID
+      Tags:
+      - Key: Name
+        Value: Deep Security Manager
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - '#!/bin/bash -xe
+
+              '
+            - '# cloud-init
+
+              '
+            - '/opt/aws/bin/cfn-init -v '
+            - ' --stack '
+            - Ref: AWS::StackName
+            - ' --resource DSM'
+            - ' --region '
+            - Ref: AWS::Region
+            - Fn::If:
+              - SQLplusELB
+              - ' -c doSqlSetup,default,setupLocalELB,setupGlobalELB'
+              - Fn::If:
+                - DoSQLSetup
+                - ' -c doSqlSetup,default'
+                - Fn::If:
+                  - IsFirstNodePlusELB
+                  - ' -c default,setupLocalELB,setupGlobalELB'
+                  - ''
+            - Fn::If:
+              - AddNodePlusELB
+              - ' -c fixManagerLocalLbAddress,addDsmNode,setupLocalELB'
+              - Fn::If:
+                - IsFirstNode
+                - ''
+                - ' -c addDsmNode'
+            - '
+
+              '
+            - Fn::If:
+              - WaitNotProvided
+              - /opt/aws/bin/cfn-signal -e $?  -r "Complete" ''
+              - Fn::Join:
+                - ''
+                - - '/opt/aws/bin/cfn-signal -e $? -r "DSM Node configuration complete" '
+                  - Fn::Base64:
+                      Ref: DSM1CompleteWaitHandle
+            - '
+
+              '
+    Type: AWS::EC2::Instance
+  DSMProfile:
+    Properties:
+      Path: /
+      Roles:
+      - Ref: DSMRole
+    Type: AWS::IAM::InstanceProfile
+  DSMRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+      Path: /
+      Policies:
+      - Fn::If:
+        - AddToELB
+        - PolicyDocument:
+            Statement:
+            - Action:
+              - ec2:DescribeLicenses
+              Effect: Allow
+              Resource: '*'
+            - Action:
+              - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+              - elasticloadbalancing:CreateLoadBalancerListeners
+              - elasticloadbalancing:CreateLoadBalancerPolicy
+              - elasticloadbalancing:SetLoadBalancerPoliciesOfListener
+              Effect: Allow
+              Resource:
+                Fn::Join:
+                - ''
+                - - 'arn:aws:elasticloadbalancing:'
+                  - Ref: AWS::Region
+                  - ':'
+                  - Ref: AWS::AccountId
+                  - :loadbalancer/
+                  - Ref: DSIELB
+            - Action:
+              - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+              - elasticloadbalancing:CreateLoadBalancerListeners
+              - elasticloadbalancing:CreateLoadBalancerPolicy
+              - elasticloadbalancing:SetLoadBalancerPoliciesOfListener
+              Effect: Allow
+              Resource:
+                Fn::Join:
+                - ''
+                - - 'arn:aws:elasticloadbalancing:'
+                  - Ref: AWS::Region
+                  - ':'
+                  - Ref: AWS::AccountId
+                  - :loadbalancer/
+                  - Ref: PrivateDSIELB
+            - Action:
+              - iam:UploadServerCertificate
+              - iam:GetServerCertificate
+              Effect: Allow
+              Resource:
+                Fn::Join:
+                - ''
+                - - 'arn:aws:iam::'
+                  - Ref: AWS::AccountId
+                  - :server-certificate/DeepSecurityElbCertificate-
+                  - Ref: AWS::StackName
+          PolicyName: PlaceholderPolicy
+        - PolicyDocument:
+            Statement:
+            - Action:
+              - ec2:DescribeLicenses
+              Effect: Allow
+              Resource: '*'
+          PolicyName: PlaceholderPolicy
+    Type: AWS::IAM::Role
+  DSMUserPolicies:
+    Properties:
+      Groups:
+      - Ref: DSIAMGroup
+      PolicyDocument:
+        Statement:
+        - Action:
+          - ec2:DescribeInstances
+          - ec2:DescribeImages
+          - ec2:DescribeTags
+          Effect: Allow
+          Resource: '*'
+      PolicyName: DSMUsers
+    Type: AWS::IAM::Policy
+  Users:
+    Properties:
+      GroupName:
+        Ref: DSIAMGroup
+      Users:
+      - Ref: DSIAMUser
+    Type: AWS::IAM::UserToGroupAddition
+

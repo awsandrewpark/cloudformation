@@ -1,0 +1,614 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  DSIsMultiNode:
+    Fn::Equals:
+    - Ref: DSIMultiNode
+    - '2'
+  DSM96Node2DB:
+    Fn::And:
+    - Condition: DSIsMultiNode
+    - Condition: LaunchRDSInstance
+  DSM96Node2NoDB:
+    Fn::And:
+    - Condition: DSIsMultiNode
+    - Condition: DoNotLaunchRDSInstance
+  DoNotLaunchRDSInstance:
+    Fn::Equals:
+    - Ref: DBPCreateDbInstance
+    - 'No'
+  LaunchRDSInstance:
+    Fn::Equals:
+    - Ref: DBPCreateDbInstance
+    - 'Yes'
+Description: 'v2016-01-08: Trend Micro Deep Security Marketplace master template.
+  For more information see http://aws.trendmicro.com'
+Mappings:
+  DSMNodeDependency:
+    Node1DB:
+      String: DSDatabaseAbstract
+    Node1NoDB:
+      String: DSISecurityGroups
+    Node2DB:
+      String: DSM95Node1
+    Node2NoDB:
+      String: DSM95Node2NoDB
+Outputs:
+  DeepSecurityConsole:
+    Value:
+      Fn::Join:
+      - ''
+      - - https://
+        - Fn::GetAtt:
+          - DSIELB
+          - Outputs.ELBFQDN
+        - ':'
+        - Ref: DSIPGUIPort
+Parameters:
+  AWSIKeyPairName:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Select an existing EC2 Key Pair.
+    Description: Existing key pair to use for connecting to your Deep Security Manager
+      Instance
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::KeyPair::KeyName
+  AWSIVPC:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    Description: Existing VPC to deploy Deep Security Manager
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::VPC::Id
+  DBICAdminName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: dsadmin
+    Description: Admin account username to be used for the database instance
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: false
+    Type: String
+  DBICAdminPassword:
+    AllowedPattern: '[a-zA-Z0-9!$^*-_+]*'
+    ConstraintDescription: Can only contain alphanumeric characters or the following
+      special characters !$^*-_+ Min length 8, max length 41
+    Description: Password to be used for the database admin account. 8-41 alphanumeric
+      characters
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DBIInstanceIdentifier:
+    Description: Choose RDS Instance ID
+    MaxLength: '15'
+    Type: String
+  DBIRDSInstanceSize:
+    AllowedValues:
+    - db.m3.medium
+    - db.m3.large
+    - db.m3.xlarge
+    - db.m3.2xlarge
+    - db.m2.xlarge
+    - db.r3.large
+    - db.r3.xlarge
+    - db.r3.2xlarge
+    - db.r3.4xlarge
+    - db.r3.8xlarge
+    - db.m2.2xlarge
+    - db.m2.4xlarge
+    - db.m1.medium
+    - db.m1.large
+    - db.m1.xlarge
+    - db.m4.large
+    - db.m4.xlarge
+    ConstraintDescription: must select a valid database instance type.
+    Default: db.m3.large
+    Description: Trend Micro Deep Security Database instance class
+    Type: String
+  DBIStorageAllocation:
+    ConstraintDescription: must be between 10 and 3072Gb.
+    Default: 100
+    Description: The Storage Allocated to Database Instance (in GB). Minimum 200 for
+      SQL Server, 10 for Oracle.
+    MaxValue: 3072
+    MinValue: 10
+    Type: Number
+  DBISubnet1:
+    ConstraintDescription: RDS Subnet Groups must be comprised of 2 subnets in seperate
+      availability zones with the specified VPC for deploying this template
+    Description: Choose a private subnets in the same VPC for the RDS instance
+    Type: AWS::EC2::Subnet::Id
+  DBISubnet2:
+    ConstraintDescription: RDS Subnet Groups must be comprised of 2 subnets in seperate
+      availability zones with the specified VPC for deploying this template
+    Description: Choose private subnets in the same VPC for this RDS instance
+    Type: AWS::EC2::Subnet::Id
+  DBPBackupDays:
+    ConstraintDescription: must be between 0 and 35 days.
+    Default: 1
+    Description: Days to keep automatic RDS backups (0-35)
+    MaxValue: 35
+    MinValue: 0
+    Type: Number
+  DBPCreateDbInstance:
+    AllowedValues:
+    - 'Yes'
+    Default: 'Yes'
+    Description: Choose whether or not to create an RDS instance for the Deep Security
+      Manager Deployment
+    Type: String
+  DBPEndpoint:
+    Default: Enter Oracle Address here if needed
+    Description: If you have an existing oracle instace, enter the endpoint address
+      here, else this field will be ignored
+    Type: String
+  DBPEngine:
+    AllowedValues:
+    - SQL
+    - Oracle
+    Default: SQL
+    Description: Choose SQL or Oracle for DSM database Engine
+    Type: String
+  DBPMultiAZ:
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Default: 'false'
+    Description: Use Multi-AZ or SQL Mirroring Option Group for RDS Instance
+    Type: String
+  DBPName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: dsm
+    Description: Name to be assigned to the database
+    MaxLength: 64
+    MinLength: 1
+    Type: String
+  DSCAdminName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+    Default: MasterAdmin
+    Description: The Deep Security Manager administrator account username for Web
+      Console Access
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: false
+    Type: String
+  DSCAdminPassword:
+    AllowedPattern: '[a-zA-Z0-9!$^*-_+]*'
+    ConstraintDescription: Can only contain alphanumeric characters or the following
+      special characters !$^*-_+ Min length 8, max length 41
+    Description: The Deep Security Manager administrator account password
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+  DSIMultiNode:
+    AllowedValues:
+    - '1'
+    - '2'
+    Description: Select number of Deep Security Managers to Deploy
+    Type: Number
+  DSIPGUIPort:
+    ConstraintDescription: Must be a valid TCP port.
+    Default: '443'
+    Description: The Deep Security Manager application and GUI port.
+    MaxValue: 65535
+    MinValue: 0
+    Type: Number
+  DSIPHeartbeatPort:
+    ConstraintDescription: Must be a valid TCP port.
+    Default: '4120'
+    Description: The heartbeat port used by Deep Security Agents and appliances to
+      communicate with the Deep Security Manager.
+    MaxValue: 65535
+    MinValue: 0
+    Type: Number
+  DSIPInstanceType:
+    AllowedValues:
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - g2.2xlarge
+    Default: m3.xlarge
+    Description: Amazon EC2 instance type for BYOL Deep Security Manager Node Instances
+      (ignored for other license types)
+    Type: String
+  DSIPLicense:
+    AllowedValues:
+    - BYOL
+    - '25'
+    - '50'
+    - '100'
+    - '200'
+    Description: Choose License Model. If choosing BYOL you may enter the license
+      below
+    Type: String
+  DSIPLicenseKey:
+    AllowedPattern: '[A-Z0-9]{2}-[A-Z0-9]{4}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}'
+    ConstraintDescription: Key can only contain ASCII characters.
+    Default: XX-XXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+    Description: Deep Security License key including dashes (e.g. AP-E9RM-99WHE-B5UR5-BV8YB-HVYM8-HYYVG)
+    MaxLength: 37
+    MinLength: 37
+    Type: String
+  DSISubnetID:
+    AllowedPattern: '[-_a-zA-Z0-9]*'
+    ConstraintDescription: Subnet ID must exist in the chosen VPC
+    Description: Existing Subnet for Deep Seucurity Manager. Must be a public subnet
+      contained the in VPC chosen above.
+    MaxLength: '255'
+    MinLength: '1'
+    Type: AWS::EC2::Subnet::Id
+Resources:
+  DSDatabaseAbstract:
+    Condition: LaunchRDSInstance
+    DependsOn: DSIRDSSecurityGroup
+    Properties:
+      Parameters:
+        DBICAdminName:
+          Ref: DBICAdminName
+        DBICAdminPassword:
+          Ref: DBICAdminPassword
+        DBIInstanceIdentifier:
+          Ref: DBIInstanceIdentifier
+        DBIRDSInstanceSize:
+          Ref: DBIRDSInstanceSize
+        DBIStorageAllocation:
+          Ref: DBIStorageAllocation
+        DBISubnet1:
+          Ref: DBISubnet1
+        DBISubnet2:
+          Ref: DBISubnet2
+        DBPBackupDays:
+          Ref: DBPBackupDays
+        DBPEngine:
+          Ref: DBPEngine
+        DBPName:
+          Ref: DBPName
+        MultiAZ:
+          Ref: DBPMultiAZ
+        RDSSG:
+          Fn::GetAtt:
+          - DSIRDSSecurityGroup
+          - Outputs.RDSSG
+        StorageType: gp2
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSDBAbstract.template
+    Type: AWS::CloudFormation::Stack
+  DSIDSMSecurityGroup:
+    Properties:
+      Parameters:
+        AWSIVPC:
+          Ref: AWSIVPC
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSMSecurityGroup.template
+    Type: AWS::CloudFormation::Stack
+  DSIDSMSecurityGroupIngressRules:
+    Properties:
+      Parameters:
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+        ELBSourceSG:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.ELBSourceSecurityGroup
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSMSGIngressRules.template
+    Type: AWS::CloudFormation::Stack
+  DSIELB:
+    Properties:
+      Parameters:
+        AWSIVPC:
+          Ref: AWSIVPC
+        DSELBPosture: External
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSISubnetID:
+          Ref: DSISubnetID
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSM96ELB.template
+    Type: AWS::CloudFormation::Stack
+  DSIRDSSecurityGroup:
+    Condition: LaunchRDSInstance
+    Properties:
+      Parameters:
+        AWSIVPC:
+          Ref: AWSIVPC
+        DBPEngine:
+          Ref: DBPEngine
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/RDSSecurityGroup.template
+    Type: AWS::CloudFormation::Stack
+  DSM1CompleteWaitCondition:
+    Condition: LaunchRDSInstance
+    DependsOn:
+    - DSM96Node1
+    Properties:
+      Handle:
+        Ref: DSM1CompleteWaitHandle
+      Timeout: '1800'
+    Type: AWS::CloudFormation::WaitCondition
+  DSM1CompleteWaitHandle:
+    Condition: LaunchRDSInstance
+    Type: AWS::CloudFormation::WaitConditionHandle
+  DSM1NoDBCompleteWaitCondition:
+    Condition: DoNotLaunchRDSInstance
+    DependsOn:
+    - DSM96Node1NoDB
+    Properties:
+      Handle:
+        Ref: DSM1CompleteWaitHandle
+      Timeout: '1500'
+    Type: AWS::CloudFormation::WaitCondition
+  DSM1NoDBCompleteWaitHandle:
+    Condition: DoNotLaunchRDSInstance
+    Type: AWS::CloudFormation::WaitConditionHandle
+  DSM96Node1:
+    Condition: LaunchRDSInstance
+    DependsOn:
+    - DSDatabaseAbstract
+    - DSIDSMSecurityGroup
+    Properties:
+      Parameters:
+        AWSIKeyPairName:
+          Ref: AWSIKeyPairName
+        AWSIVPC:
+          Ref: AWSIVPC
+        CreateEIP: 'False'
+        DBICAdminName:
+          Ref: DBICAdminName
+        DBICAdminPassword:
+          Ref: DBICAdminPassword
+        DBPEngine:
+          Ref: DBPEngine
+        DBPName:
+          Ref: DBPName
+        DBPRDSEndpoint:
+          Fn::GetAtt:
+          - DSDatabaseAbstract
+          - Outputs.DSDBEndpoint
+        DSCAdminName:
+          Ref: DSCAdminName
+        DSCAdminPassword:
+          Ref: DSCAdminPassword
+        DSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.DSIELB
+        DSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.ELBFQDN
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSIPInstanceType:
+          Ref: DSIPInstanceType
+        DSIPLicense:
+          Ref: DSIPLicense
+        DSIPLicenseKey:
+          Ref: DSIPLicenseKey
+        DSISubnetID:
+          Ref: DSISubnetID
+        DSM1CompleteWaitHandle:
+          Ref: DSM1CompleteWaitHandle
+        DSMPMNode: 'No'
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+        PrivateDSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateDSIELB
+        PrivateDSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateELBFQDN
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSM96MP.template
+    Type: AWS::CloudFormation::Stack
+  DSM96Node1NoDB:
+    Condition: DoNotLaunchRDSInstance
+    DependsOn:
+    - DSIDSMSecurityGroup
+    Properties:
+      Parameters:
+        AWSIKeyPairName:
+          Ref: AWSIKeyPairName
+        AWSIVPC:
+          Ref: AWSIVPC
+        CreateEIP: 'False'
+        DBICAdminName:
+          Ref: DBICAdminName
+        DBICAdminPassword:
+          Ref: DBICAdminPassword
+        DBPEngine:
+          Ref: DBPEngine
+        DBPName:
+          Ref: DBPName
+        DBPRDSEndpoint:
+          Ref: DBPEndpoint
+        DSCAdminName:
+          Ref: DSCAdminName
+        DSCAdminPassword:
+          Ref: DSCAdminPassword
+        DSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.DSIELB
+        DSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.ELBFQDN
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSIPInstanceType:
+          Ref: DSIPInstanceType
+        DSIPLicense:
+          Ref: DSIPLicense
+        DSIPLicenseKey:
+          Ref: DSIPLicenseKey
+        DSISubnetID:
+          Ref: DSISubnetID
+        DSM1NoDBCompleteWaitHandle:
+          Ref: DSM1NoDBCompleteWaitHandle
+        DSMPMNode: 'No'
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+        PrivateDSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateDSIELB
+        PrivateDSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateELBFQDN
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSM96MP.template
+    Type: AWS::CloudFormation::Stack
+  DSM96Node2:
+    Condition: DSM96Node2DB
+    DependsOn:
+    - DSIDSMSecurityGroup
+    - DSM1CompleteWaitCondition
+    Properties:
+      Parameters:
+        AWSIKeyPairName:
+          Ref: AWSIKeyPairName
+        AWSIVPC:
+          Ref: AWSIVPC
+        CreateEIP: 'False'
+        DBICAdminName:
+          Ref: DBICAdminName
+        DBICAdminPassword:
+          Ref: DBICAdminPassword
+        DBPEngine:
+          Ref: DBPEngine
+        DBPName:
+          Ref: DBPName
+        DBPRDSEndpoint:
+          Fn::GetAtt:
+          - DSDatabaseAbstract
+          - Outputs.DSDBEndpoint
+        DSCAdminName:
+          Ref: DSCAdminName
+        DSCAdminPassword:
+          Ref: DSCAdminPassword
+        DSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.DSIELB
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSIPInstanceType:
+          Ref: DSIPInstanceType
+        DSIPLicense:
+          Ref: DSIPLicense
+        DSIPLicenseKey:
+          Ref: DSIPLicenseKey
+        DSISubnetID:
+          Ref: DSISubnetID
+        DSMPMNode: 'Yes'
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+        PrivateDSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateDSIELB
+        PrivateDSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateELBFQDN
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSM96MP.template
+    Type: AWS::CloudFormation::Stack
+  DSM96Node2NoDB:
+    Condition: DSM96Node2NoDB
+    DependsOn: DSM1NoDBCompleteWaitCondition
+    Properties:
+      Parameters:
+        AWSIKeyPairName:
+          Ref: AWSIKeyPairName
+        AWSIVPC:
+          Ref: AWSIVPC
+        CreateEIP: 'False'
+        DBICAdminName:
+          Ref: DBICAdminName
+        DBICAdminPassword:
+          Ref: DBICAdminPassword
+        DBPEngine:
+          Ref: DBPEngine
+        DBPName:
+          Ref: DBPName
+        DBPRDSEndpoint:
+          Ref: DBPEndpoint
+        DSCAdminName:
+          Ref: DSCAdminName
+        DSCAdminPassword:
+          Ref: DSCAdminPassword
+        DSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.DSIELB
+        DSIPGUIPort:
+          Ref: DSIPGUIPort
+        DSIPHeartbeatPort:
+          Ref: DSIPHeartbeatPort
+        DSIPInstanceType:
+          Ref: DSIPInstanceType
+        DSIPLicense:
+          Ref: DSIPLicense
+        DSIPLicenseKey:
+          Ref: DSIPLicenseKey
+        DSISubnetID:
+          Ref: DSISubnetID
+        DSMPMNode: 'Yes'
+        DSMSG:
+          Fn::GetAtt:
+          - DSIDSMSecurityGroup
+          - Outputs.DSMSG
+        PrivateDSIELB:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateDSIELB
+        PrivateDSIELBFQDN:
+          Fn::GetAtt:
+          - DSIELB
+          - Outputs.PrivateELBFQDN
+      TemplateURL: https://s3.amazonaws.com/quickstart-reference/trendmicro/deepsecurity/latest/templates/DSM96MP.template
+    Type: AWS::CloudFormation::Stack
+
