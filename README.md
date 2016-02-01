@@ -1,2 +1,3 @@
-# cloudformation
-Contains various AWS CloudFormation templates
+# cloudformation ☁︎
+
+### AWS CloudFormation Templates 🔓
